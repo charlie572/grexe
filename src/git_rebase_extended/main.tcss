@@ -5,3 +5,15 @@
 .commit_message {
     color: $primary;
 }
+
+.active {
+    background: gray;
+}
+
+.selected {
+    background: blue 50%;
+}
+
+.active.selected {
+    background: darkblue 50%;
+}
