@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-rebase-extended"
+version = "0.0.1"
+requires-python = ">=3.13.1"
+authors = [
+  {name = "Charlie Bareham", email = "barehamcharlie@gmail.com"},
+]
+description = "A CLI for performing interactive rebases with extra features."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+  "Programming Language :: Python"
+]
+
+[project.urls]
+Repository = "https://github.com/me/spam.git"
+
+[project.scripts]
+git-rebase-extended = "git_rebase_extended.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
