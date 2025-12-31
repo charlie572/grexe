@@ -1,0 +1,7 @@
+.hexsha {
+    color: $secondary;
+}
+
+.commit_message {
+    color: $primary;
+}
