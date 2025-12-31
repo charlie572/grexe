@@ -11,7 +11,8 @@ Features:
 
 # Setup
 
-`pip install .` or `pip install -e .`.
+1. `pip install .` or `pip install -e .`
+2. `pre-commit install`
 
 # Usage
 
