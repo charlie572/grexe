@@ -1,4 +1,7 @@
 import argparse
+import os
+import subprocess
+import sys
 from os import path
 from typing import List, Optional
 
@@ -26,6 +29,12 @@ class GitRebaseExtendedApp(App):
         ("j", "move_down", "Move the cursor down."),
         ("k", "move_up", "Move the cursor up."),
         ("v", "select", "Select commit."),
+        ("p", "pick", "Set the commit's action to 'pick'."),
+        ("f", "fixup", "Set the commit's action to 'fixup'."),
+        ("s", "squash", "Set the commit's action to 'squash'."),
+        ("e", "edit", "Set the commit's action to 'edit'."),
+        ("r", "reword", "Set the commit's action to 'reword'."),
+        ("enter", "submit", "Submit and perform rebase."),
     ]
 
     def __init__(self, commits: List[Commit], *args, **kwargs):
@@ -33,6 +42,11 @@ class GitRebaseExtendedApp(App):
         self._commits: List[Commit] = commits
         self._commit_widgets: Optional[List[List[Widget]]] = None
         self._active_index = None
+
+        self._command_output = ""
+
+    def get_command_output(self):
+        return self._command_output
 
     def _set_active(self, index):
         # clear previous active commit
@@ -47,6 +61,30 @@ class GitRebaseExtendedApp(App):
 
         self._active_index = index
 
+    def action_submit(self):
+        # build rebase file
+        rebase_todo = ""
+        for (action_label, hash_label, message_label, *_) in self._commit_widgets:
+            action_label: Label
+            rebase_todo += (
+                f"{action_label.content} {hash_label.content} {message_label.content}\n"
+            )
+
+        # run git rebase command
+        # Custom editor command outputs rebase_todo to file.
+        env = os.environ.copy()
+        env["GIT_EDITOR"] = f"echo {repr(rebase_todo)}"
+        process = subprocess.run(
+            ["git", "rebase", "-i", *sys.argv[1:]],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self._command_output += process.stdout.decode()
+
+        self.exit()
+
     def action_move_up(self):
         new_index = max(0, self._active_index - 1)
         self._set_active(new_index)
@@ -59,6 +97,36 @@ class GitRebaseExtendedApp(App):
         widgets = self._commit_widgets[self._active_index]
         for widget in widgets:
             widget.toggle_class("selected")
+
+    def _get_selected_widgets(self):
+        result = []
+        for widgets in self._commit_widgets:
+            if "selected" in widgets[0].classes:
+                result.append(widgets)
+
+        return result
+
+    def _set_rebase_action(self, action: str):
+        active_action_label, *_ = self._commit_widgets[self._active_index]
+        active_action_label.update(action)
+
+        for (action_label, *_) in self._get_selected_widgets():
+            action_label.update(action)
+
+    def action_edit(self):
+        self._set_rebase_action("edit")
+
+    def action_pick(self):
+        self._set_rebase_action("pick")
+
+    def action_fixup(self):
+        self._set_rebase_action("fixup")
+
+    def action_squash(self):
+        self._set_rebase_action("squash")
+
+    def action_drop(self):
+        self._set_rebase_action("drop")
 
     def compose(self):
         files = sum(
@@ -120,6 +188,8 @@ def main():
 
     app = GitRebaseExtendedApp(commits)
     app.run()
+
+    print(app.get_command_output())
 
 
 if __name__ == "__main__":
