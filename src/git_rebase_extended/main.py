@@ -139,7 +139,7 @@ class GitRebaseExtendedApp(App):
             grid.styles.grid_rows = "1"
             grid.styles.grid_size_rows = len(self._commits) + 1
             grid.styles.grid_size_columns = 3 + len(files)
-            grid.styles.height = len(self._commits)
+            grid.styles.height = len(self._commits) + 1
 
             # header row
             yield Label("")
