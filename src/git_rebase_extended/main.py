@@ -63,6 +63,46 @@ class GitRebaseExtendedApp(App):
         )
         self._files = list(set(self._files))
 
+    def _get_items_to_modify(self):
+        """Get the rebase items to modify
+
+        This can be used when moving multiple items, or changing the rebase action of
+        multiple items.
+
+        If some items are selected, this function will return them. If no items are
+        selected, the active item will be returned (the one currently under the
+        cursor).
+        """
+        selected_items = self._get_selected()
+        if len(selected_items) == 0:
+            _, active_item = self._get_active()
+            if active_item is None:
+                return []
+            else:
+                return [active_item]
+        else:
+            return selected_items
+
+    def _get_indices_to_modify(self):
+        """Get the indices of the rebase items to modify
+
+        This can be used when moving multiple items, or changing the rebase action of
+        multiple items.
+
+        If some items are selected, this function will return them. If no items are
+        selected, the active item will be returned (the one currently under the
+        cursor).
+        """
+        selected_indices = self._get_selected_indices()
+        if len(selected_indices) == 0:
+            active_index, _ = self._get_active()
+            if active_index is None:
+                return []
+            else:
+                return [active_index]
+        else:
+            return selected_indices
+
     def _get_active(self):
         for i, item in enumerate(self._rebase_items):
             if item.active:
@@ -121,11 +161,7 @@ class GitRebaseExtendedApp(App):
     def action_move_commits(self):
         if self._state == "idle":
             # remove selected widgets
-            indices_to_move = self._get_selected_indices()
-            if len(indices_to_move) == 0:
-                active_index, active_item = self._get_active()
-                active_item.selected = True
-                indices_to_move = [active_index]
+            indices_to_move = self._get_indices_to_modify()
             items_to_move = [
                 self._rebase_items.pop(i) for i in reversed(indices_to_move)
             ]
@@ -181,12 +217,8 @@ class GitRebaseExtendedApp(App):
         self.refresh(recompose=True)
 
     def _set_rebase_action(self, action: RebaseAction):
-        _, active_item = self._get_active()
-        active_item.action = action
-
-        for item in self._rebase_items:
-            if item.selected:
-                item.action = action
+        for item in self._get_items_to_modify():
+            item.action = action
 
         self.refresh(recompose=True)
 
