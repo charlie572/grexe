@@ -2,10 +2,10 @@ import argparse
 import os
 import subprocess
 import sys
-from os import path
-from typing import List, Optional, Literal, Tuple
-
+from copy import deepcopy
 from dataclasses import dataclass
+from os import path
+from typing import List, Literal, Tuple
 
 from git import Repo, Commit
 from textual.app import App
@@ -31,8 +31,6 @@ RebaseAction = Literal["pick", "drop", "edit", "reword", "squash", "fixup"]
 class RebaseItem:
     commit: Commit
     action: RebaseAction = "pick"
-    selected: bool = False
-    active: bool = False
 
 
 class GitRebaseExtendedApp(App):
@@ -50,11 +48,19 @@ class GitRebaseExtendedApp(App):
         ("enter", "submit", "Submit and perform rebase."),
         ("m", "move_commits", "Move commits."),
         ("ctrl+a", "select_all", "Select all/none."),
+        ("ctrl+z", "undo", "Undo"),
+        ("ctrl+y", "redo", "Redo"),
     ]
 
     def __init__(self, commits: List[Commit], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._rebase_items = [RebaseItem(commit) for commit in commits]
+        self._history: List[Tuple[RebaseItem, ...]] = [
+            tuple(RebaseItem(commit) for commit in commits)
+        ]
+        self._history_index = 0
+        self._active_index = 0
+        self._selected = [False] * len(commits)
+
         self._state: Literal["idle", "moving"] = "idle"
 
         self._command_output = ""
@@ -64,7 +70,26 @@ class GitRebaseExtendedApp(App):
         )
         self._files = list(set(self._files))
 
-    def _get_items_to_modify(self):
+    @property
+    def num_commits(self):
+        return len(self._history[0])
+
+    def _get_rebase_items(self):
+        return self._history[self._history_index]
+
+    def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
+        self._history = self._history[: self._history_index + 1] + [rebase_items]
+        self._history_index += 1
+
+    def action_undo(self):
+        self._history_index = max(0, self._history_index - 1)
+        self.refresh(recompose=True)
+
+    def action_redo(self):
+        self._history_index = min(self.num_commits - 1, self._history_index + 1)
+        self.refresh(recompose=True)
+
+    def _get_items_to_modify(self, rebase_items=None):
         """Get the rebase items to modify
 
         This can be used when moving multiple items, or changing the rebase action of
@@ -74,13 +99,12 @@ class GitRebaseExtendedApp(App):
         selected, the active item will be returned (the one currently under the
         cursor).
         """
-        selected_items = self._get_selected()
+        if rebase_items is None:
+            rebase_items = self._get_rebase_items()
+
+        selected_items = self._get_selected(rebase_items)
         if len(selected_items) == 0:
-            _, active_item = self._get_active()
-            if active_item is None:
-                return []
-            else:
-                return [active_item]
+            return [rebase_items[self._active_index]]
         else:
             return selected_items
 
@@ -94,54 +118,33 @@ class GitRebaseExtendedApp(App):
         selected, the active item will be returned (the one currently under the
         cursor).
         """
-        selected_indices = self._get_selected_indices()
+        selected_indices = self._get_selected(indices=True)
         if len(selected_indices) == 0:
-            active_index, _ = self._get_active()
-            if active_index is None:
-                return []
-            else:
-                return [active_index]
+            return [self._active_index]
         else:
             return selected_indices
 
-    def _get_active(self):
-        for i, item in enumerate(self._rebase_items):
-            if item.active:
-                return i, item
+    def _get_selected(self, rebase_items=None, indices=False):
+        if rebase_items is None:
+            rebase_items = self._get_rebase_items()
 
-        return None, None
-
-    def _get_selected(self):
         result = []
-        for i, item in enumerate(self._rebase_items):
-            if item.selected:
-                result.append(item)
-
-        return result
-
-    def _get_selected_indices(self):
-        result = []
-        for i, item in enumerate(self._rebase_items):
-            if item.selected:
-                result.append(i)
+        for i, item in enumerate(rebase_items):
+            if self._selected[i]:
+                if indices:
+                    result.append(i)
+                else:
+                    result.append(item)
 
         return result
 
     def get_command_output(self):
         return self._command_output
 
-    def _set_active(self, index):
-        for item in self._rebase_items:
-            item.active = False
-
-        self._rebase_items[index].active = True
-
-        self.refresh(recompose=True)
-
     def action_submit(self):
         # build rebase file
         rebase_todo = ""
-        for action, commit in self._rebase_items:
+        for action, commit in self._get_rebase_items():
             rebase_todo += f"{action} {commit.hexsha[:7]} {commit.message}\n"
 
         # run git rebase command
@@ -161,26 +164,30 @@ class GitRebaseExtendedApp(App):
 
     def action_move_commits(self):
         if self._state == "idle":
+            rebase_items = list(deepcopy(self._get_rebase_items()))
+
             # remove selected widgets
             indices_to_move = self._get_indices_to_modify()
-            items_to_move = [
-                self._rebase_items.pop(i) for i in reversed(indices_to_move)
-            ]
+            items_to_move = [rebase_items.pop(i) for i in reversed(indices_to_move)]
 
             # insert widgets back again as one block, with the bottom commit at its original index
             dest_index = indices_to_move[-1] - len(indices_to_move) + 1
             for item in items_to_move:
-                self._rebase_items.insert(dest_index, item)
+                rebase_items.insert(dest_index, item)
+
+            self._selected[:] = [False] * self.num_commits
+            for i in range(dest_index, dest_index + len(items_to_move)):
+                self._selected[i] = True
 
             self._state = "moving"
 
+            self._set_rebase_items(tuple(rebase_items))
             self.refresh(recompose=True)
         elif self._state == "moving":
-            selected_indices = self._get_selected_indices()
+            selected_indices = self._get_selected(indices=True)
 
-            self._set_active(selected_indices[0])
-            for item in self._rebase_items:
-                item.selected = False
+            self._active_index = selected_indices[0]
+            self._selected[:] = [False] * self.num_commits
 
             self._state = "idle"
 
@@ -188,56 +195,67 @@ class GitRebaseExtendedApp(App):
 
     def action_move_up(self):
         if self._state == "idle":
-            index, _ = self._get_active()
-            new_index = max(0, index - 1)
-            self._set_active(new_index)
+            self._active_index = max(0, self._active_index - 1)
             self.refresh(recompose=True)
         elif self._state == "moving":
-            selected_indices = self._get_selected_indices()
-            if selected_indices[0] > 0:
-                item_before_selected = self._rebase_items.pop(selected_indices[0] - 1)
-                self._rebase_items.insert(selected_indices[-1], item_before_selected)
-                self.refresh(recompose=True)
+            rebase_items = list(deepcopy(self._get_rebase_items()))
+            selected_indices = [i for i in range(self.num_commits) if self._selected[i]]
+            if selected_indices[0] == 0:
+                return
+
+            item_before_selected = rebase_items.pop(selected_indices[0] - 1)
+            rebase_items.insert(selected_indices[-1], item_before_selected)
+            self._set_rebase_items(tuple(rebase_items))
+
+            self._selected[:] = [False] * self.num_commits
+            for i in selected_indices:
+                self._selected[i - 1] = True
+
+            self.refresh(recompose=True)
 
     def action_move_down(self):
+        rebase_items = list(deepcopy(self._get_rebase_items()))
+
         if self._state == "idle":
-            index, _ = self._get_active()
-            new_index = min(len(self._rebase_items) - 1, index + 1)
-            self._set_active(new_index)
+            self._active_index = min(self.num_commits - 1, self._active_index + 1)
             self.refresh(recompose=True)
         elif self._state == "moving":
-            selected_indices = self._get_selected_indices()
-            if selected_indices[-1] < len(self._rebase_items) - 1:
-                item_after_selected = self._rebase_items.pop(selected_indices[-1] + 1)
-                self._rebase_items.insert(selected_indices[0], item_after_selected)
-                self.refresh(recompose=True)
+            selected_indices = self._get_selected(indices=True)
+            if selected_indices[-1] == len(rebase_items) - 1:
+                return
+
+            item_after_selected = rebase_items.pop(selected_indices[-1] + 1)
+            rebase_items.insert(selected_indices[0], item_after_selected)
+            self._set_rebase_items(tuple(rebase_items))
+
+            self._selected[:] = [False] * len(self._selected)
+            for i in selected_indices:
+                self._selected[i + 1] = True
+
+            self.refresh(recompose=True)
 
     def action_select(self):
-        _, item = self._get_active()
-        item.selected = not item.selected
+        self._selected[self._active_index] = not self._selected[self._active_index]
         self.refresh(recompose=True)
 
     def action_select_all(self):
         if self._state != "idle":
             return
 
-        _, active_item = self._get_active()
-        if not active_item:
-            raise RuntimeError()
-
-        selected = not active_item.selected
-        for item in self._rebase_items:
-            item.selected = selected
-
+        selected = not self._selected[self._active_index]
+        self._selected[:] = [selected] * self.num_commits
         self.refresh(recompose=True)
 
     def _set_rebase_action(self, action: RebaseAction):
         if self._state != "idle":
             return
 
-        for item in self._get_items_to_modify():
+        rebase_items = deepcopy(self._get_rebase_items())
+
+        for item in self._get_items_to_modify(rebase_items):
             item.action = action
 
+        self._set_rebase_items(rebase_items)
         self.refresh(recompose=True)
 
     def action_edit(self):
@@ -256,13 +274,15 @@ class GitRebaseExtendedApp(App):
         self._set_rebase_action("drop")
 
     def compose(self):
+        rebase_items = self._get_rebase_items()
+
         with Grid() as grid:
             grid.id = "main_grid"
             grid.styles.grid_columns = "7 10 2fr " + "1fr " * len(self._files)
             grid.styles.grid_rows = "1"
-            grid.styles.grid_size_rows = len(self._rebase_items) + 1
+            grid.styles.grid_size_rows = len(rebase_items) + 1
             grid.styles.grid_size_columns = 3 + len(self._files)
-            grid.styles.height = len(self._rebase_items) + 1
+            grid.styles.height = len(rebase_items) + 1
 
             # header row
             yield Label("")
@@ -273,11 +293,11 @@ class GitRebaseExtendedApp(App):
                 yield Label(filename, classes="filename")
 
             # commit rows
-            for item in self._rebase_items:
+            for i, item in enumerate(rebase_items):
                 classes = []
-                if item.active:
+                if i == self._active_index and self._state == "idle":
                     classes.append("active")
-                if item.selected:
+                if self._selected[i]:
                     classes.append("selected")
                 classes = " ".join(classes)
 
@@ -290,10 +310,6 @@ class GitRebaseExtendedApp(App):
 
                 for file in self._files:
                     yield FileChange(file in item.commit.stats.files, classes=classes)
-
-    def on_mount(self):
-        self._set_active(0)
-        self.refresh(recompose=True)
 
 
 def main():
