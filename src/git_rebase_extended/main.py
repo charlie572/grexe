@@ -68,7 +68,23 @@ class GitRebaseExtendedApp(App):
             if item.active:
                 return i, item
 
-        raise RuntimeError("No active rebase item.")
+        return None
+
+    def _get_selected(self):
+        result = []
+        for i, item in enumerate(self._rebase_items):
+            if item.selected:
+                result.append(item)
+
+        return result
+
+    def _get_selected_indices(self):
+        result = []
+        for i, item in enumerate(self._rebase_items):
+            if item.selected:
+                result.append(i)
+
+        return result
 
     def get_command_output(self):
         return self._command_output
@@ -105,29 +121,59 @@ class GitRebaseExtendedApp(App):
     def action_move_commits(self):
         if self._state == "idle":
             # remove selected widgets
-            selected_indices = [
-                i for i, item in enumerate(self._rebase_items) if item.selected
-            ]
-            selected_items = [
-                self._rebase_items.pop(i) for i in reversed(selected_indices)
+            indices_to_move = self._get_selected_indices()
+            if len(indices_to_move) == 0:
+                active_index, active_item = self._get_active()
+                active_item.selected = True
+                indices_to_move = [active_index]
+            items_to_move = [
+                self._rebase_items.pop(i) for i in reversed(indices_to_move)
             ]
 
             # insert widgets back again as one block, with the bottom commit at its original index
-            dest_index = selected_indices[-1] - len(selected_indices) + 1
-            for item in selected_items:
+            dest_index = indices_to_move[-1] - len(indices_to_move) + 1
+            for item in items_to_move:
                 self._rebase_items.insert(dest_index, item)
+
+            self._state = "moving"
+
+            self.refresh(recompose=True)
+        elif self._state == "moving":
+            selected_indices = self._get_selected_indices()
+
+            self._set_active(selected_indices[0])
+            for item in self._rebase_items:
+                item.selected = False
+
+            self._state = "idle"
 
             self.refresh(recompose=True)
 
     def action_move_up(self):
-        index, _ = self._get_active()
-        new_index = max(0, index - 1)
-        self._set_active(new_index)
+        if self._state == "idle":
+            index, _ = self._get_active()
+            new_index = max(0, index - 1)
+            self._set_active(new_index)
+            self.refresh(recompose=True)
+        elif self._state == "moving":
+            selected_indices = self._get_selected_indices()
+            if selected_indices[0] > 0:
+                item_before_selected = self._rebase_items.pop(selected_indices[0] - 1)
+                self._rebase_items.insert(selected_indices[-1], item_before_selected)
+                self.refresh(recompose=True)
 
     def action_move_down(self):
-        index, _ = self._get_active()
-        new_index = min(len(self._rebase_items) - 1, index + 1)
-        self._set_active(new_index)
+        if self._state == "idle":
+            index, _ = self._get_active()
+            new_index = min(len(self._rebase_items) - 1, index + 1)
+            self._set_active(new_index)
+            self.refresh(recompose=True)
+        elif self._state == "moving":
+            selected_indices = self._get_selected_indices()
+            if selected_indices[-1] < len(self._rebase_items) - 1:
+                item_after_selected = self._rebase_items.pop(selected_indices[-1] + 1)
+                self._rebase_items.insert(selected_indices[0], item_after_selected)
+                self.refresh(recompose=True)
 
     def action_select(self):
         _, item = self._get_active()
@@ -197,6 +243,7 @@ class GitRebaseExtendedApp(App):
 
     def on_mount(self):
         self._set_active(0)
+        self.refresh(recompose=True)
 
 
 def main():
