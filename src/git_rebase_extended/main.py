@@ -49,6 +49,7 @@ class GitRebaseExtendedApp(App):
         ("r", "reword", "Set the commit's action to 'reword'."),
         ("enter", "submit", "Submit and perform rebase."),
         ("m", "move_commits", "Move commits."),
+        ("ctrl+a", "select_all", "Select all/none."),
     ]
 
     def __init__(self, commits: List[Commit], *args, **kwargs):
@@ -108,7 +109,7 @@ class GitRebaseExtendedApp(App):
             if item.active:
                 return i, item
 
-        return None
+        return None, None
 
     def _get_selected(self):
         result = []
@@ -216,7 +217,24 @@ class GitRebaseExtendedApp(App):
         item.selected = not item.selected
         self.refresh(recompose=True)
 
+    def action_select_all(self):
+        if self._state != "idle":
+            return
+
+        _, active_item = self._get_active()
+        if not active_item:
+            raise RuntimeError()
+
+        selected = not active_item.selected
+        for item in self._rebase_items:
+            item.selected = selected
+
+        self.refresh(recompose=True)
+
     def _set_rebase_action(self, action: RebaseAction):
+        if self._state != "idle":
+            return
+
         for item in self._get_items_to_modify():
             item.action = action
 
