@@ -3,7 +3,9 @@ import os
 import subprocess
 import sys
 from os import path
-from typing import List, Optional
+from typing import List, Optional, Literal, Tuple
+
+from dataclasses import dataclass
 
 from git import Repo, Commit
 from textual.app import App
@@ -22,6 +24,17 @@ class FileChange(Widget):
         return f" [on $secondary]{content} [/on $secondary] "
 
 
+RebaseAction = Literal["pick", "drop", "edit", "reword", "squash", "fixup"]
+
+
+@dataclass
+class RebaseItem:
+    commit: Commit
+    action: RebaseAction = "pick"
+    selected: bool = False
+    active: bool = False
+
+
 class GitRebaseExtendedApp(App):
     CSS_PATH = "main.tcss"
 
@@ -35,40 +48,44 @@ class GitRebaseExtendedApp(App):
         ("e", "edit", "Set the commit's action to 'edit'."),
         ("r", "reword", "Set the commit's action to 'reword'."),
         ("enter", "submit", "Submit and perform rebase."),
+        ("m", "move_commits", "Move commits."),
     ]
 
     def __init__(self, commits: List[Commit], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._commits: List[Commit] = commits
-        self._commit_widgets: Optional[List[List[Widget]]] = None
-        self._active_index = None
+        self._rebase_items = [RebaseItem(commit) for commit in commits]
+        self._state: Literal["idle", "moving"] = "idle"
 
         self._command_output = ""
+
+        self._files = sum(
+            [list(commit.stats.files.keys()) for commit in commits], start=[]
+        )
+        self._files = list(set(self._files))
+
+    def _get_active(self):
+        for i, item in enumerate(self._rebase_items):
+            if item.active:
+                return i, item
+
+        raise RuntimeError("No active rebase item.")
 
     def get_command_output(self):
         return self._command_output
 
     def _set_active(self, index):
-        # clear previous active commit
-        for widgets in self._commit_widgets:
-            for widget in widgets:
-                widget.remove_class("active")
+        for item in self._rebase_items:
+            item.active = False
 
-        # set background of new active commit
-        widgets = self._commit_widgets[index]
-        for widget in widgets:
-            widget.add_class("active")
+        self._rebase_items[index].active = True
 
-        self._active_index = index
+        self.refresh(recompose=True)
 
     def action_submit(self):
         # build rebase file
         rebase_todo = ""
-        for (action_label, hash_label, message_label, *_) in self._commit_widgets:
-            action_label: Label
-            rebase_todo += (
-                f"{action_label.content} {hash_label.content} {message_label.content}\n"
-            )
+        for action, commit in self._rebase_items:
+            rebase_todo += f"{action} {commit.hexsha[:7]} {commit.message}\n"
 
         # run git rebase command
         # Custom editor command outputs rebase_todo to file.
@@ -85,33 +102,47 @@ class GitRebaseExtendedApp(App):
 
         self.exit()
 
+    def action_move_commits(self):
+        if self._state == "idle":
+            # remove selected widgets
+            selected_indices = [
+                i for i, item in enumerate(self._rebase_items) if item.selected
+            ]
+            selected_items = [
+                self._rebase_items.pop(i) for i in reversed(selected_indices)
+            ]
+
+            # insert widgets back again as one block, with the bottom commit at its original index
+            dest_index = selected_indices[-1] - len(selected_indices) + 1
+            for item in selected_items:
+                self._rebase_items.insert(dest_index, item)
+
+            self.refresh(recompose=True)
+
     def action_move_up(self):
-        new_index = max(0, self._active_index - 1)
+        index, _ = self._get_active()
+        new_index = max(0, index - 1)
         self._set_active(new_index)
 
     def action_move_down(self):
-        new_index = min(len(self._commits) - 1, self._active_index + 1)
+        index, _ = self._get_active()
+        new_index = min(len(self._rebase_items) - 1, index + 1)
         self._set_active(new_index)
 
     def action_select(self):
-        widgets = self._commit_widgets[self._active_index]
-        for widget in widgets:
-            widget.toggle_class("selected")
+        _, item = self._get_active()
+        item.selected = not item.selected
+        self.refresh(recompose=True)
 
-    def _get_selected_widgets(self):
-        result = []
-        for widgets in self._commit_widgets:
-            if "selected" in widgets[0].classes:
-                result.append(widgets)
+    def _set_rebase_action(self, action: RebaseAction):
+        _, active_item = self._get_active()
+        active_item.action = action
 
-        return result
+        for item in self._rebase_items:
+            if item.selected:
+                item.action = action
 
-    def _set_rebase_action(self, action: str):
-        active_action_label, *_ = self._commit_widgets[self._active_index]
-        active_action_label.update(action)
-
-        for (action_label, *_) in self._get_selected_widgets():
-            action_label.update(action)
+        self.refresh(recompose=True)
 
     def action_edit(self):
         self._set_rebase_action("edit")
@@ -129,43 +160,40 @@ class GitRebaseExtendedApp(App):
         self._set_rebase_action("drop")
 
     def compose(self):
-        files = sum(
-            [list(commit.stats.files.keys()) for commit in self._commits], start=[]
-        )
-        files = list(set(files))
-
         with Grid() as grid:
-            grid.styles.grid_columns = "7 10 2fr " + "1fr " * len(files)
+            grid.id = "main_grid"
+            grid.styles.grid_columns = "7 10 2fr " + "1fr " * len(self._files)
             grid.styles.grid_rows = "1"
-            grid.styles.grid_size_rows = len(self._commits) + 1
-            grid.styles.grid_size_columns = 3 + len(files)
-            grid.styles.height = len(self._commits) + 1
+            grid.styles.grid_size_rows = len(self._rebase_items) + 1
+            grid.styles.grid_size_columns = 3 + len(self._files)
+            grid.styles.height = len(self._rebase_items) + 1
 
             # header row
             yield Label("")
             yield Label("")
             yield Label("")
-            for file in files:  # add file names in file columns headers
+            for file in self._files:  # add file names in file columns headers
                 _, filename = path.split(file)
                 yield Label(filename, classes="filename")
 
             # commit rows
-            self._commit_widgets = []
-            for commit in self._commits:
-                widgets = [
-                    Label("pick", classes="rebase_action"),
-                    Label(commit.hexsha[:7], classes="hexsha"),
-                ]
+            for item in self._rebase_items:
+                classes = []
+                if item.active:
+                    classes.append("active")
+                if item.selected:
+                    classes.append("selected")
+                classes = " ".join(classes)
 
-                first_message_line = commit.message.split("\n")[0]
-                message_label = Label(first_message_line, classes="commit_message")
-                widgets.append(message_label)
+                yield Label(item.action, classes=f"rebase_action {classes}")
 
-                for file in files:
-                    widgets.append(FileChange(file in commit.stats.files))
+                yield Label(item.commit.hexsha[:7], classes=f"hexsha {classes}")
 
-                self._commit_widgets.append(widgets)
-                yield from widgets
+                first_message_line = item.commit.message.split("\n")[0]
+                yield Label(first_message_line, classes=f"commit_message {classes}")
+
+                for file in self._files:
+                    yield FileChange(file in item.commit.stats.files, classes=classes)
 
     def on_mount(self):
         self._set_active(0)
