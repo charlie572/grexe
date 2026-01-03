@@ -29,8 +29,10 @@ class GitRebaseExtendedApp(App):
     def action_submit(self):
         # build rebase file
         rebase_todo = ""
-        for action, commit in self._main_screen.get_rebase_items():
-            rebase_todo += f"{action} {commit.hexsha[:7]} {commit.message}\n"
+        for item in self._main_screen.get_rebase_items():
+            rebase_todo += (
+                f"{item.action} {item.commit.hexsha[:7]} {item.commit.message}\n"
+            )
 
         # run git rebase command
         # Custom editor command outputs rebase_todo to file.
