@@ -17,3 +17,7 @@
 .active.selected {
     background: darkblue 50%;
 }
+
+.popup {
+    border: $foreground;
+}

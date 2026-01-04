@@ -3,12 +3,13 @@ from copy import deepcopy
 from typing import List, Tuple, Literal
 
 from git import Commit
+from textual import events
 from textual.containers import Grid
 from textual.screen import Screen
 from textual.widgets import Label
 
-from git_rebase_extended.types import RebaseItem, RebaseAction
-from git_rebase_extended.widgets import FileChange
+from git_rebase_extended.types import RebaseAction, RebaseItem
+from git_rebase_extended.widgets import FileChangeIndicator
 
 
 class MainScreen(Screen):
@@ -17,6 +18,8 @@ class MainScreen(Screen):
     BINDINGS = [
         ("j", "move_down", "Move the cursor down."),
         ("k", "move_up", "Move the cursor up."),
+        ("h", "move_left", "Move the cursor left."),
+        ("l", "move_right", "Move the cursor right."),
         ("v", "select", "Select commit."),
         ("p", "pick", "Set the commit's action to 'pick'."),
         ("f", "fixup", "Set the commit's action to 'fixup'."),
@@ -28,27 +31,36 @@ class MainScreen(Screen):
         ("ctrl+a", "select_all", "Select all/none."),
         ("ctrl+z", "undo", "Undo"),
         ("ctrl+y", "redo", "Redo"),
+        ("c", "copy", "Copy a commit."),
+        ("t", "toggle_file", "Toggle a file in a commit."),
     ]
 
-    def __init__(self, commits: List[Commit], *args, **kwargs):
+    def __init__(
+        self,
+        commits: List[Commit],
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+
         self._history: List[Tuple[RebaseItem, ...]] = [
-            tuple(RebaseItem(commit) for commit in commits)
+            tuple(RebaseItem("pick", commit) for commit in commits)
         ]
         self._history_index = 0
         self._active_index = 0
+        self._active_file_index = -1
         self._selected = [False] * len(commits)
 
         self._state: Literal["idle", "moving"] = "idle"
 
-        self._files = sum(
+        self._files: List[str | os.PathLike[str]] = sum(
             [list(commit.stats.files.keys()) for commit in commits], start=[]
         )
         self._files = list(set(self._files))
 
     @property
     def num_commits(self):
-        return len(self._history[0])
+        return len(self._history[self._history_index])
 
     def get_rebase_items(self):
         return self._history[self._history_index]
@@ -59,10 +71,12 @@ class MainScreen(Screen):
 
     def action_undo(self):
         self._history_index = max(0, self._history_index - 1)
+        self._selected = [False] * len(self._history[self._history_index])
         self.refresh(recompose=True)
 
     def action_redo(self):
         self._history_index = min(self.num_commits - 1, self._history_index + 1)
+        self._selected = [False] * len(self._history[self._history_index])
         self.refresh(recompose=True)
 
     def _get_items_to_modify(self, rebase_items=None):
@@ -113,6 +127,59 @@ class MainScreen(Screen):
                     result.append(item)
 
         return result
+
+    def action_copy(self):
+        rebase_items = list(deepcopy(self.get_rebase_items()))
+        active_item = rebase_items[self._active_index]
+
+        rebase_items.insert(self._active_index + 1, deepcopy(active_item))
+        self._selected.insert(self._active_index + 1, False)
+
+        self._set_rebase_items(tuple(rebase_items))
+        self.refresh(recompose=True)
+
+    def action_toggle_file(self):
+        rebase_items = list(deepcopy(self.get_rebase_items()))
+        active_item: RebaseItem = rebase_items[self._active_index]
+
+        file = self._files[self._active_file_index]
+        file_change = active_item.file_changes[file]
+        file_change.modified = not file_change.modified
+
+        self._set_rebase_items(tuple(rebase_items))
+        self.refresh(recompose=True)
+
+    def action_move_left(self):
+        active_item = self.get_rebase_items()[self._active_index]
+        if not isinstance(active_item, RebaseItem):
+            return
+
+        # move left to next file indicator, or select no files (self._active_file_index == -1)
+        while self._active_file_index > -1:
+            self._active_file_index -= 1
+            file = self._files[self._active_file_index]
+            if file in active_item.file_changes:
+                break
+
+        self.refresh(recompose=True)
+
+    def action_move_right(self):
+        active_item = self.get_rebase_items()[self._active_index]
+        if not isinstance(active_item, RebaseItem):
+            return
+
+        previous_active_file_index = self._active_file_index
+
+        # move right to next file indicator
+        while self._active_file_index < len(self._files) - 1:
+            self._active_file_index += 1
+            file = self._files[self._active_file_index]
+            if file in active_item.file_changes:
+                self.refresh(recompose=True)
+                return
+
+        # No more files. Reset index to what it was before this function was run.
+        self._active_file_index = previous_active_file_index
 
     def action_move_commits(self):
         if self._state == "idle":
@@ -233,7 +300,7 @@ class MainScreen(Screen):
 
         with Grid() as grid:
             grid.id = "main_grid"
-            grid.styles.grid_columns = "7 10 2fr " + "1fr " * len(self._files)
+            grid.styles.grid_columns = "7 20 2fr " + "1fr " * len(self._files)
             grid.styles.grid_rows = "1"
             grid.styles.grid_size_rows = len(rebase_items) + 1
             grid.styles.grid_size_columns = 3 + len(self._files)
@@ -263,5 +330,21 @@ class MainScreen(Screen):
                 first_message_line = item.commit.message.split("\n")[0]
                 yield Label(first_message_line, classes=f"commit_message {classes}")
 
-                for file in self._files:
-                    yield FileChange(file in item.commit.stats.files, classes=classes)
+                for j, file in enumerate(self._files):
+                    file_change = item.file_changes.get(file)
+                    if file_change:
+                        selectable = True
+                        changed = file_change.modified
+                    else:
+                        selectable = False
+                        changed = False
+
+                    active = (
+                        i == self._active_index
+                        and j == self._active_file_index
+                        and isinstance(item, RebaseItem)
+                    )
+
+                    yield FileChangeIndicator(
+                        changed, selectable, active, classes=classes
+                    )
