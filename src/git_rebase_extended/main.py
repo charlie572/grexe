@@ -45,6 +45,7 @@ class GitRebaseExtendedApp(App):
         ("s", "squash", "Set the commit's action to 'squash'."),
         ("e", "edit", "Set the commit's action to 'edit'."),
         ("r", "reword", "Set the commit's action to 'reword'."),
+        ("d", "drop", "Set the commit's action to 'drop'."),
         ("enter", "submit", "Submit and perform rebase."),
         ("m", "move_commits", "Move commits."),
         ("ctrl+a", "select_all", "Select all/none."),
@@ -272,6 +273,9 @@ class GitRebaseExtendedApp(App):
 
     def action_drop(self):
         self._set_rebase_action("drop")
+
+    def action_reword(self):
+        self._set_rebase_action("reword")
 
     def compose(self):
         rebase_items = self._get_rebase_items()
