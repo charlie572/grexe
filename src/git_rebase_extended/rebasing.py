@@ -1,8 +1,32 @@
 import os
 import subprocess
-from typing import List, Optional
+from itertools import groupby
+from typing import List, Optional, Counter
 
 from git_rebase_extended.types import RebaseItem
+
+
+def check_rebase_is_valid(rebase_items: List[RebaseItem]) -> List[str]:
+    # group together items copied from the same commit
+    items_by_commit = groupby(rebase_items, lambda item: item.commit.hexsha)
+
+    errors = []
+
+    # check that no file change is repeated
+    for commit_sha, items_for_commit in items_by_commit:
+        files_seen = set()
+        for item in items_for_commit:
+            for file_path, file_change in item.file_changes.items():
+                if not file_change.modified:
+                    continue
+                elif file_path in files_seen:
+                    errors.append(
+                        f"File {file_path} in commit {commit_sha[:7]} has been included multiple times."
+                    )
+                else:
+                    files_seen.add(file_path)
+
+    return errors
 
 
 def rebase(

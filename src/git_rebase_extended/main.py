@@ -8,7 +8,7 @@ from git import Repo, Commit
 from textual.app import App
 
 from git_rebase_extended.main_screen import MainScreen
-from git_rebase_extended.rebasing import rebase
+from git_rebase_extended.rebasing import rebase, check_rebase_is_valid
 
 
 class GitRebaseExtendedApp(App):
@@ -28,7 +28,16 @@ class GitRebaseExtendedApp(App):
         return self._command_output
 
     def action_submit(self):
-        output = rebase(self._main_screen.get_rebase_items(), sys.argv[1:])
+        rebase_items = self._main_screen.get_rebase_items()
+
+        errors = check_rebase_is_valid(rebase_items)
+        if errors:
+            self.notify(
+                "\n".join(errors), title="Rebase cannot be performed", severity="error"
+            )
+            return
+
+        output = rebase(rebase_items, sys.argv[1:])
         self._command_output += output
 
         self.exit()
