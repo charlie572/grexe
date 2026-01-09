@@ -8,6 +8,7 @@ from git import Repo, Commit
 from textual.app import App
 
 from git_rebase_extended.main_screen import MainScreen
+from git_rebase_extended.rebasing import rebase
 
 
 class GitRebaseExtendedApp(App):
@@ -27,25 +28,8 @@ class GitRebaseExtendedApp(App):
         return self._command_output
 
     def action_submit(self):
-        # build rebase file
-        rebase_todo = ""
-        for item in self._main_screen.get_rebase_items():
-            rebase_todo += (
-                f"{item.action} {item.commit.hexsha[:7]} {item.commit.message}\n"
-            )
-
-        # run git rebase command
-        # Custom editor command outputs rebase_todo to file.
-        env = os.environ.copy()
-        env["GIT_EDITOR"] = f"echo {repr(rebase_todo)}"
-        process = subprocess.run(
-            ["git", "rebase", "-i", *sys.argv[1:]],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-
-        self._command_output += process.stdout.decode()
+        output = rebase(self._main_screen.get_rebase_items(), sys.argv[1:])
+        self._command_output += output
 
         self.exit()
 
