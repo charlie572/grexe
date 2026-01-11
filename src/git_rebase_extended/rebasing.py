@@ -3,6 +3,8 @@ import subprocess
 from itertools import groupby
 from typing import List, Optional, Counter
 
+from git import Repo
+
 from git_rebase_extended.types import RebaseItem
 
 
@@ -27,6 +29,29 @@ def check_rebase_is_valid(rebase_items: List[RebaseItem]) -> List[str]:
                     files_seen.add(file_path)
 
     return errors
+
+
+def parse_rebase_items(rebase_todo: str, repo: Repo) -> List[RebaseItem]:
+    result = []
+    for line in rebase_todo.split("\n"):
+        if line.startswith("#") or len(line.strip()) == 0:
+            continue
+        action, sha, *message = line.split(" ")
+        commit = repo.commit(sha)
+        result.append(RebaseItem(action, commit))
+
+    return result
+
+
+def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
+    rebase_todo_text = ""
+    for item in rebase_items:
+        first_message_line = item.commit.message.split("\n")[0]
+        rebase_todo_text += (
+            f"{item.action} {item.commit.hexsha[:7]} {first_message_line}\n"
+        )
+
+    return rebase_todo_text
 
 
 def rebase(

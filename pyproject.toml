@@ -9,7 +9,7 @@ requires-python = ">=3.13.1"
 authors = [
   {name = "Charlie Bareham", email = "barehamcharlie@gmail.com"},
 ]
-description = "A CLI for performing interactive rebases with extra features."
+description = "An editor for performing interactive rebases with extra features."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -21,7 +21,7 @@ classifiers = [
 Repository = "https://github.com/me/spam.git"
 
 [project.scripts]
-git-rebase-extended = "git_rebase_extended.main:main"
+git-rebase-extended-editor = "git_rebase_extended.editor:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

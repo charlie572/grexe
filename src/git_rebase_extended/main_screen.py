@@ -2,8 +2,6 @@ import os
 from copy import deepcopy
 from typing import List, Tuple, Literal
 
-from git import Commit
-from textual import events
 from textual.containers import Grid
 from textual.screen import Screen
 from textual.widgets import Label
@@ -37,24 +35,22 @@ class MainScreen(Screen):
 
     def __init__(
         self,
-        commits: List[Commit],
+        rebase_items: List[RebaseItem],
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self._history: List[Tuple[RebaseItem, ...]] = [
-            tuple(RebaseItem("pick", commit) for commit in commits)
-        ]
+        self._history: List[Tuple[RebaseItem, ...]] = [tuple(rebase_items)]
         self._history_index = 0
         self._active_index = 0
         self._active_file_index = -1
-        self._selected = [False] * len(commits)
+        self._selected = [False] * len(rebase_items)
 
         self._state: Literal["idle", "moving"] = "idle"
 
         self._files: List[str | os.PathLike[str]] = sum(
-            [list(commit.stats.files.keys()) for commit in commits], start=[]
+            [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
         self._files = list(set(self._files))
 

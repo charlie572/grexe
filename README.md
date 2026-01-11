@@ -1,6 +1,6 @@
 # Git Extended Rebase
 
-A CLI for performing interactive rebases with extra features.
+An editor for performing interactive rebases with extra features.
 
 Features:
 - Split a commit into several commits. You can select certain files to go into each new commit.
@@ -16,8 +16,8 @@ Features:
 
 # Usage
 
-Run `git-rebase-extended` in the command line. This will open a CLI to perform an interactive rebase. Command line
-arguments will be passed to `git rebase`.
+Set the `GIT_EDITOR` environment variable to `git-rebase-extended-editor`. You can now run git rebases with the extended
+editor.
 
 # Dependencies
 
