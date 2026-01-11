@@ -68,6 +68,7 @@ def main():
 
     repo = Repo(".")
     commits = list(repo.iter_commits(f"{args.branch}..{repo.head.commit}"))
+    commits.reverse()
 
     app = GitRebaseExtendedApp(commits)
     app.run()
