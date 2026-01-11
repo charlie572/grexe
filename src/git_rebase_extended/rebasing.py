@@ -51,6 +51,32 @@ def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
             f"{item.action} {item.commit.hexsha[:7]} {first_message_line}\n"
         )
 
+        if all(change.modified for change in item.file_changes.values()):
+            continue
+
+        # This rebase item only contains a subset of the files of the original commit. Add an exec command which removes
+        # the files that aren't included from the commit.
+        #
+        # Newline characters seem to work differently in rebase exec commands than in the regular bash shell. Through
+        # trial and error, I've found a way to include newline characters in the commit message. I output the commit
+        # message to .git/COMMIT_EDITMSG, using a single quote string and no $, then I input that file to `git commit`.
+        # I don't know why this works, or why the methods that work in a normal bash shell don't work here. Any file
+        # should work, but I'm using .git/COMMIT_EDITMSG because it's the file git normally uses for editing commit
+        # messages.
+        add_commands = [
+            f'git add "{change.path}"'
+            for change in item.file_changes.values()
+            if change.modified
+        ]
+        commit_message_bash_string = "'" + repr(item.commit.message)[1:-1] + "'"
+        rebase_todo_text += (
+            "exec git reset --mixed HEAD~1; "
+            + f"{'; '.join(add_commands)}; "
+            + f"echo {commit_message_bash_string} > .git/COMMIT_EDITMSG; "
+            + f"git commit -F .git/COMMIT_EDITMSG; "
+            + f"git restore .\n"
+        )
+
     return rebase_todo_text
 
 
