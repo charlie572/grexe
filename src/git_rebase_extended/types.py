@@ -4,6 +4,7 @@ from typing import Literal, List
 
 from git import Commit
 
+REBASE_ACTIONS = ["pick", "drop", "edit", "reword", "squash", "fixup"]
 RebaseAction = Literal["pick", "drop", "edit", "reword", "squash", "fixup"]
 
 

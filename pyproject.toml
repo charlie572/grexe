@@ -22,6 +22,7 @@ Repository = "https://github.com/me/spam.git"
 
 [project.scripts]
 git-rebase-extended-editor = "git_rebase_extended.editor:main"
+edit-rebase-item = "git_rebase_extended.edit_rebase_item:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

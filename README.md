@@ -16,8 +16,8 @@ Features:
 
 # Usage
 
-Set the `GIT_EDITOR` environment variable to `git-rebase-extended-editor`. You can now run git rebases with the extended
-editor.
+Set the `GIT_SEQUENCE_EDITOR` environment variable or the `sequence.editor` setting in git to
+`git-rebase-extended-editor`. You can now run git rebases with the extended editor.
 
 # Dependencies
 
