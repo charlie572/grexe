@@ -42,7 +42,7 @@ class GitRebaseExtendedEditor(App):
 def main():
     parser = argparse.ArgumentParser(
         "git-rebase-extended-editor",
-        description=("An editor for git rebase todo files."),
+        description="An editor for git rebase todo files.",
     )
     parser.add_argument("rebase_todo_file", type=str)
     args = parser.parse_args()
