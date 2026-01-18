@@ -7,7 +7,7 @@ from textual.screen import Screen
 from textual.widgets import Label
 
 from git_rebase_extended.types import RebaseAction, RebaseItem
-from git_rebase_extended.widgets import FileChangeIndicator
+from git_rebase_extended.widgets import FileChangeIndicator, FilenameLabel
 
 
 class MainScreen(Screen):
@@ -53,6 +53,8 @@ class MainScreen(Screen):
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
         self._files = list(set(self._files))
+
+        self._last_hovered_file = None
 
     @property
     def num_commits(self):
@@ -123,6 +125,17 @@ class MainScreen(Screen):
                     result.append(item)
 
         return result
+
+    def on_mouse_move(self, event):
+        # Show a message with the full path of the file the user is hovering over. Use
+        # self._last_hovered file to make sure a new message isn't shown for every frame
+        # that the cursor moves over a file.
+        if isinstance(self.app.mouse_over, FilenameLabel):
+            if self.app.mouse_over.path != self._last_hovered_file:
+                self.notify(self.app.mouse_over.path, timeout=3)
+            self._last_hovered_file = self.app.mouse_over.path
+        else:
+            self._last_hovered_file = None
 
     def action_copy(self):
         rebase_items = list(deepcopy(self.get_rebase_items()))
@@ -340,9 +353,7 @@ class MainScreen(Screen):
 
                 # header row
                 for file in self._files:
-                    # Add a space to the filename to so there is a gap between it and the next column.
-                    _, filename = os.path.split(file)
-                    yield Label(filename, classes="filename")
+                    yield FilenameLabel(file, classes="filename")
 
                 # commit rows
                 for i, item in enumerate(rebase_items):

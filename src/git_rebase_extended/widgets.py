@@ -1,4 +1,7 @@
+import os
+
 from textual.widget import Widget
+from textual.widgets import Label
 
 
 class FileChangeIndicator(Widget):
@@ -18,3 +21,10 @@ class FileChangeIndicator(Widget):
 
         content_colour = "$primary" if self._active else "white"
         return f" [{content_colour} on $secondary]{content} [/] "
+
+
+class FilenameLabel(Label):
+    def __init__(self, path, *args, **kwargs):
+        _, filename = os.path.split(path)
+        super().__init__(filename, *args, **kwargs)
+        self.path = path
