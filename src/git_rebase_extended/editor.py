@@ -22,6 +22,10 @@ class GitRebaseExtendedEditor(App):
         self._rebase_items = rebase_items
         self._result: Optional[str] = None
 
+    def action_quit(self) -> None:
+        # Return exit code 1, so the rebase isn't performed.
+        exit(1)
+
     def get_result(self):
         return self._result
 
