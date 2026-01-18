@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import List, Tuple, Literal
 
 from textual.containers import Grid, Horizontal
+from textual.events import Click
 from textual.screen import Screen
 from textual.widgets import Label
 
@@ -136,6 +137,56 @@ class MainScreen(Screen):
             self._last_hovered_file = self.app.mouse_over.path
         else:
             self._last_hovered_file = None
+
+    def on_click(self, event: Click):
+        # check if a file was clicked
+        file_grid = self.query_one("#file_grid")
+        for child_index, child in enumerate(file_grid.children):
+            if child is not event.widget:
+                continue
+
+            # File change indicator was clicked. Select it and toggle it.
+
+            commit_index = child_index // len(self._files) - 1
+            file_index = child_index % len(self._files)
+
+            # get file change object
+            rebase_items = self.get_rebase_items()
+            file = self._files[file_index]
+            file_change = rebase_items[commit_index].file_changes.get(file)
+            if file_change is None:
+                # This file change isn't included in this commit. It is a blank space in the UI. Do nothing.
+                return
+
+            # select commit
+            self._active_index = commit_index
+            self._selected = [False] * self.num_commits
+            self._selected[commit_index] = True
+
+            # select file
+            self._active_file_index = file_index
+
+            # toggle file
+            file_change.modified = not file_change.modified
+            self._set_rebase_items(rebase_items)
+
+            self.refresh(recompose=True)
+            return
+
+        # check if a commit was clicked
+        commit_grid = self.query_one("#commit_grid")
+        for child_index, child in enumerate(commit_grid.children):
+            if child is not event.widget:
+                continue
+
+            # Commit was clicked. Select it.
+            commit_index = child_index // 3 - 1
+            self._active_index = commit_index
+            self._selected = [False] * self.num_commits
+            self._selected[commit_index] = True
+
+            self.refresh(recompose=True)
+            return
 
     def action_copy(self):
         rebase_items = list(deepcopy(self.get_rebase_items()))
@@ -312,7 +363,7 @@ class MainScreen(Screen):
         # are grid layouts.
 
         with Horizontal():
-            with Grid() as commit_grid:
+            with Grid(id="commit_grid") as commit_grid:
                 commit_grid.styles.grid_columns = "auto"
                 commit_grid.styles.grid_gutter_vertical = 2
                 commit_grid.styles.grid_rows = "1"
@@ -341,7 +392,7 @@ class MainScreen(Screen):
                     first_message_line = item.commit.message.split("\n")[0]
                     yield Label(first_message_line, classes=f"commit_message {classes}")
 
-            with Grid() as file_grid:
+            with Grid(id="file_grid") as file_grid:
                 file_grid.styles.grid_columns = "auto"
                 file_grid.styles.grid_gutter_vertical = 1
                 file_grid.styles.grid_rows = "1"
