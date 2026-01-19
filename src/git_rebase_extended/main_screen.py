@@ -7,6 +7,7 @@ from textual.events import Click
 from textual.screen import Screen
 from textual.widgets import Label
 
+from git_rebase_extended.file_selector import FileSelector
 from git_rebase_extended.types import RebaseAction, RebaseItem
 from git_rebase_extended.widgets import FileChangeIndicator, FilenameLabel
 
@@ -363,6 +364,8 @@ class MainScreen(Screen):
         # are grid layouts.
 
         with Horizontal():
+            yield FileSelector(self._files)
+
             with Grid(id="commit_grid") as commit_grid:
                 commit_grid.styles.grid_columns = "auto"
                 commit_grid.styles.grid_gutter_vertical = 2
