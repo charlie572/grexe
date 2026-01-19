@@ -55,6 +55,7 @@ class MainScreen(Screen):
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
         self._files = list(set(self._files))
+        self._visible_files = self._files.copy()
 
         self._last_hovered_file = None
 
@@ -148,12 +149,12 @@ class MainScreen(Screen):
 
             # File change indicator was clicked. Select it and toggle it.
 
-            commit_index = child_index // len(self._files) - 1
-            file_index = child_index % len(self._files)
+            commit_index = child_index // len(self._visible_files) - 1
+            file_index = child_index % len(self._visible_files)
 
             # get file change object
             rebase_items = self.get_rebase_items()
-            file = self._files[file_index]
+            file = self._visible_files[file_index]
             file_change = rebase_items[commit_index].file_changes.get(file)
             if file_change is None:
                 # This file change isn't included in this commit. It is a blank space in the UI. Do nothing.
@@ -203,7 +204,7 @@ class MainScreen(Screen):
         rebase_items = list(deepcopy(self.get_rebase_items()))
         active_item: RebaseItem = rebase_items[self._active_index]
 
-        file = self._files[self._active_file_index]
+        file = self._visible_files[self._active_file_index]
         file_change = active_item.file_changes[file]
         file_change.modified = not file_change.modified
 
@@ -218,7 +219,7 @@ class MainScreen(Screen):
         # move left to next file indicator, or select no files (self._active_file_index == -1)
         while self._active_file_index > -1:
             self._active_file_index -= 1
-            file = self._files[self._active_file_index]
+            file = self._visible_files[self._active_file_index]
             if file in active_item.file_changes:
                 break
 
@@ -232,9 +233,9 @@ class MainScreen(Screen):
         previous_active_file_index = self._active_file_index
 
         # move right to next file indicator
-        while self._active_file_index < len(self._files) - 1:
+        while self._active_file_index < len(self._visible_files) - 1:
             self._active_file_index += 1
-            file = self._files[self._active_file_index]
+            file = self._visible_files[self._active_file_index]
             if file in active_item.file_changes:
                 self.refresh(recompose=True)
                 return
@@ -356,6 +357,9 @@ class MainScreen(Screen):
     def action_reword(self):
         self._set_rebase_action("reword")
 
+    def on_file_selector_changed_active_files(self, event):
+        print(event.active_files)
+
     def compose(self):
         rebase_items = self.get_rebase_items()
 
@@ -364,7 +368,7 @@ class MainScreen(Screen):
         # are grid layouts.
 
         with Horizontal():
-            yield FileSelector(self._files)
+            yield FileSelector(self._files, self._visible_files)
 
             with Grid(id="commit_grid") as commit_grid:
                 commit_grid.styles.grid_columns = "auto"
@@ -400,13 +404,13 @@ class MainScreen(Screen):
                 file_grid.styles.grid_gutter_vertical = 1
                 file_grid.styles.grid_rows = "1"
                 file_grid.styles.grid_size_rows = len(rebase_items) + 1
-                file_grid.styles.grid_size_columns = len(self._files)
+                file_grid.styles.grid_size_columns = len(self._visible_files)
                 # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
                 file_grid.styles.height = len(rebase_items) + 2
                 file_grid.styles.overflow_x = "auto"
 
                 # header row
-                for file in self._files:
+                for file in self._visible_files:
                     yield FilenameLabel(file, classes="filename")
 
                 # commit rows
@@ -418,7 +422,7 @@ class MainScreen(Screen):
                         classes.append("selected")
                     classes = " ".join(classes)
 
-                    for j, file in enumerate(self._files):
+                    for j, file in enumerate(self._visible_files):
                         file_change = item.file_changes.get(file)
                         if file_change:
                             selectable = True

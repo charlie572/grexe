@@ -1,20 +1,40 @@
 import os.path
 from os import PathLike
-from typing import Iterable, Dict
+from typing import Iterable, Dict, List, Set
 
 from rich.style import Style
 from rich.text import Text
+from textual.message import Message
 
 from textual.widgets import Tree
 from textual.widgets._tree import TreeNode, TreeDataType
 
 
 class FileSelector(Tree):
-    def __init__(self, file_paths: Iterable[str | PathLike], *args, **kwargs):
+    class ChangedActiveFiles(Message):
+        def __init__(self, active_files: List[str | PathLike]):
+            self.active_files = active_files
+            super().__init__()
+
+    def __init__(
+        self,
+        file_paths: Iterable[str | PathLike],
+        active_file_paths: Iterable[str | PathLike],
+        *args,
+        **kwargs,
+    ):
         common_path = os.path.commonpath(file_paths)
+
+        _active_file_paths = set()
+        for path in active_file_paths:
+            path_elements = path.split(os.path.sep)
+            for i in range(len(path_elements)):
+                node_path = os.path.sep.join(path_elements[: i + 1])
+                _active_file_paths.add(node_path)
+
         super().__init__(
             common_path,
-            data={"path": common_path, "active": True},
+            data={"path": common_path, "active": len(_active_file_paths) > 0},
             *args,
             **kwargs,
         )
@@ -34,8 +54,8 @@ class FileSelector(Tree):
                         node_name,
                         expand=True,
                         data={
-                            "path": path,
-                            "active": True,
+                            "path": node_path,
+                            "active": node_path in _active_file_paths,
                         },
                     )
 
@@ -43,6 +63,19 @@ class FileSelector(Tree):
         node: TreeNode[str] = event.node
         active = not node.data["active"]
         self.set_nodes_active(node, active)
+
+        active_files = self.get_active_files(self.root)
+        self.post_message(self.ChangedActiveFiles(active_files))
+
+    @classmethod
+    def get_active_files(cls, node: TreeNode[str]):
+        active_paths = []
+        if len(node.children) == 0 and node.data["active"]:
+            active_paths.append(node.data["path"])
+        for child in node.children:
+            active_paths += cls.get_active_files(child)
+
+        return active_paths
 
     @classmethod
     def set_nodes_active(cls, node: TreeNode[str], active: bool):
