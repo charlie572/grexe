@@ -23,7 +23,7 @@ class FileSelector(Tree):
         *args,
         **kwargs,
     ):
-        common_path = os.path.commonpath(file_paths)
+        self._common_path = os.path.commonpath(file_paths)
 
         _active_file_paths = set()
         for path in active_file_paths:
@@ -33,13 +33,13 @@ class FileSelector(Tree):
                 _active_file_paths.add(node_path)
 
         super().__init__(
-            common_path,
-            data={"path": common_path, "active": len(_active_file_paths) > 0},
+            self._common_path,
+            data={"path": self._common_path, "active": len(_active_file_paths) > 0},
             *args,
             **kwargs,
         )
 
-        file_paths = [os.path.relpath(path, common_path) for path in file_paths]
+        file_paths = [os.path.relpath(path, self._common_path) for path in file_paths]
         nodes: Dict[str : TreeNode[str]] = {"": self.root}
         self.root.expand()
         for path in file_paths:
@@ -65,6 +65,9 @@ class FileSelector(Tree):
         self.set_nodes_active(node, active)
 
         active_files = self.get_active_files(self.root)
+        active_files = [
+            os.path.join(self._common_path, rel_path) for rel_path in active_files
+        ]
         self.post_message(self.ChangedActiveFiles(active_files))
 
     @classmethod

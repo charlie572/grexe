@@ -59,6 +59,8 @@ class MainScreen(Screen):
 
         self._last_hovered_file = None
 
+        self._file_selector = None
+
     @property
     def num_commits(self):
         return len(self._history[self._history_index])
@@ -358,7 +360,8 @@ class MainScreen(Screen):
         self._set_rebase_action("reword")
 
     def on_file_selector_changed_active_files(self, event):
-        print(event.active_files)
+        self._visible_files = event.active_files
+        self.refresh(recompose=True)
 
     def compose(self):
         rebase_items = self.get_rebase_items()
@@ -430,6 +433,9 @@ class MainScreen(Screen):
                         else:
                             selectable = False
                             changed = False
+
+                        # if len(item.file_changes) == 1:
+                        #     print(f"Creating file indicator: {file=} {item.file_changes} {selectable=} {changed=}")
 
                         active = (
                             i == self._active_index
