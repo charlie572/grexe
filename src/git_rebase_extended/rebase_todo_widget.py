@@ -14,26 +14,6 @@ from git_rebase_extended.widgets import FilenameLabel, FileChangeIndicator
 class RebaseTodoWidget(Widget):
     CSS_PATH = "main.tcss"
 
-    # BINDINGS = [
-    #     ("j", "move_down", "Move the cursor down."),
-    #     ("k", "move_up", "Move the cursor up."),
-    #     ("h", "move_left", "Move the cursor left."),
-    #     ("l", "move_right", "Move the cursor right."),
-    #     ("v", "select", "Select commit."),
-    #     ("p", "pick", "Set the commit's action to 'pick'."),
-    #     ("f", "fixup", "Set the commit's action to 'fixup'."),
-    #     ("s", "squash", "Set the commit's action to 'squash'."),
-    #     ("e", "edit", "Set the commit's action to 'edit'."),
-    #     ("r", "reword", "Set the commit's action to 'reword'."),
-    #     ("d", "drop", "Set the commit's action to 'drop'."),
-    #     ("m", "move_commits", "Move commits."),
-    #     ("ctrl+a", "select_all", "Select all/none."),
-    #     ("ctrl+z", "undo", "Undo"),
-    #     ("ctrl+y", "redo", "Redo"),
-    #     ("c", "copy", "Copy a commit."),
-    #     ("t", "toggle_file", "Toggle a file in a commit."),
-    # ]
-
     def __init__(
         self,
         rebase_items: List[RebaseItem],
