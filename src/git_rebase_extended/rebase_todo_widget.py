@@ -15,9 +15,40 @@ def distribute_changes(
     source_indices: List[int],
     target_indices: List[int],
     rebase_items: Tuple[RebaseItem, ...],
-) -> Tuple[RebaseItem, ...]:
-    print(source_indices, target_indices)
-    return deepcopy(rebase_items)
+):
+    # TODO: handle case where some of the target commits are squashed into each other.
+
+    # check that source and target are disjoint
+    intersection = set(source_indices).intersection(target_indices)
+    if len(intersection) != 0:
+        intersect_shas = [rebase_items[i].commit.hexsha[:7] for i in intersection]
+        return {
+            "error": f"{', '.join(intersect_shas)} are in both source and target set."
+        }
+
+    # build list of files in source
+    source_files = []
+    for i in source_indices:
+        for file_path, file_change in rebase_items[i].file_changes.items():
+            if file_change.modified:
+                source_files.append(file_path)
+
+    # build map of files to destination commits
+    change_destinations = {}
+    for i in target_indices:
+        for file_path, file_change in rebase_items[i].file_changes.items():
+            # Ignore changes that are omitted from the source or target commits.
+            if not file_change.modified or file_path not in source_files:
+                continue
+
+            if file_path in change_destinations:
+                # A change cannot map to two commits.
+                sha_1 = rebase_items[i].commit.hexsha[:7]
+                other_index = change_destinations[file_path]
+                sha_2 = rebase_items[other_index].commit.hexsha[:7]
+                return {"error": f"{file_path} is modified by both {sha_1} and {sha_2}"}
+
+            change_destinations[file_path] = i
 
 
 class RebaseTodoWidget(Widget):
