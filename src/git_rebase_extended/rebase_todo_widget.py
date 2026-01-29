@@ -1,12 +1,13 @@
 import os
 from copy import deepcopy
-from typing import List, Tuple, Literal
+from typing import List, Tuple, Literal, Optional
 
-from textual.containers import Horizontal, Grid
+from textual.containers import Horizontal, Grid, Vertical
 from textual.events import Click, Key
 from textual.widget import Widget
 from textual.widgets import Label
 
+from git_rebase_extended.distribute import distribute_changes
 from git_rebase_extended.types import RebaseItem, RebaseAction
 from git_rebase_extended.widgets import FilenameLabel, FileChangeIndicator
 
@@ -29,12 +30,14 @@ class RebaseTodoWidget(Widget):
         self._active_index = 0
         self._active_file_index = -1
         self._selected = [False] * len(rebase_items)
+        self._distribute_sources: Optional[List[int]] = None
 
-        self._state: Literal["idle", "moving"] = "idle"
+        self._state: Literal["idle", "moving", "selecting_distribute_targets"] = "idle"
 
         self._visible_files: List[str | os.PathLike[str]] = sum(
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
+        self._visible_files = list(set(self._visible_files))
 
         self._last_hovered_file = None
 
@@ -73,6 +76,8 @@ class RebaseTodoWidget(Widget):
             self.action_undo()
         if event.key == "ctrl+y":
             self.action_redo()
+        if event.key == "q":
+            self.action_distribute()
 
     @property
     def num_commits(self):
@@ -84,6 +89,35 @@ class RebaseTodoWidget(Widget):
     def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
         self._history = self._history[: self._history_index + 1] + [rebase_items]
         self._history_index += 1
+
+    def action_distribute(self):
+        if self._state == "idle":
+            self._distribute_sources = [
+                i for i in range(len(self._selected)) if self._selected[i]
+            ]
+            if len(self._distribute_sources) == 0:
+                return
+            self._selected = [False] * len(self._selected)
+            self._state = "selecting_distribute_targets"
+            self.refresh(recompose=True)
+        elif self._state == "selecting_distribute_targets":
+            distribute_targets = [
+                i for i in range(len(self._selected)) if self._selected[i]
+            ]
+            if len(self._distribute_sources) > 0:
+                distributed_items, error = distribute_changes(
+                    self._distribute_sources,
+                    distribute_targets,
+                    self.get_rebase_items(),
+                )
+                if error is not None:
+                    self.notify(error)
+                else:
+                    self._set_rebase_items(distributed_items)
+            self._selected = [False] * self.num_commits
+            self._distribute_sources = None
+            self._state = "idle"
+            self.refresh(recompose=True)
 
     def action_undo(self):
         self._history_index = max(0, self._history_index - 1)
@@ -290,10 +324,7 @@ class RebaseTodoWidget(Widget):
             self.refresh(recompose=True)
 
     def action_move_up(self):
-        if self._state == "idle":
-            self._active_index = max(0, self._active_index - 1)
-            self.refresh(recompose=True)
-        elif self._state == "moving":
+        if self._state == "moving":
             rebase_items = list(deepcopy(self.get_rebase_items()))
             selected_indices = [i for i in range(self.num_commits) if self._selected[i]]
             if selected_indices[0] == 0:
@@ -308,14 +339,14 @@ class RebaseTodoWidget(Widget):
                 self._selected[i - 1] = True
 
             self.refresh(recompose=True)
+        else:
+            self._active_index = max(0, self._active_index - 1)
+            self.refresh(recompose=True)
 
     def action_move_down(self):
-        rebase_items = list(deepcopy(self.get_rebase_items()))
+        if self._state == "moving":
+            rebase_items = list(deepcopy(self.get_rebase_items()))
 
-        if self._state == "idle":
-            self._active_index = min(self.num_commits - 1, self._active_index + 1)
-            self.refresh(recompose=True)
-        elif self._state == "moving":
             selected_indices = self._get_selected(indices=True)
             if selected_indices[-1] == len(rebase_items) - 1:
                 return
@@ -328,6 +359,9 @@ class RebaseTodoWidget(Widget):
             for i in selected_indices:
                 self._selected[i + 1] = True
 
+            self.refresh(recompose=True)
+        else:
+            self._active_index = min(self.num_commits - 1, self._active_index + 1)
             self.refresh(recompose=True)
 
     def action_select(self):
@@ -383,74 +417,84 @@ class RebaseTodoWidget(Widget):
         # right half shows the file changes. The right half is scrollable horizontally. Both halves
         # are grid layouts.
 
-        with Horizontal():
-            with Grid(id="commit_grid") as commit_grid:
-                commit_grid.styles.grid_columns = "auto"
-                commit_grid.styles.grid_gutter_vertical = 2
-                commit_grid.styles.grid_rows = "1"
-                commit_grid.styles.grid_size_rows = len(rebase_items) + 1
-                commit_grid.styles.grid_size_columns = 3
-                commit_grid.styles.height = len(rebase_items) + 1
+        with Vertical():
+            status_text = (
+                "Select commits to distribute into..."
+                if self._state == "selecting_distribute_targets"
+                else ""
+            )
+            yield Label(status_text)
 
-                # header row
-                yield Label("")
-                yield Label("")
-                yield Label("")
+            with Horizontal():
+                with Grid(id="commit_grid") as commit_grid:
+                    commit_grid.styles.grid_columns = "auto"
+                    commit_grid.styles.grid_gutter_vertical = 2
+                    commit_grid.styles.grid_rows = "1"
+                    commit_grid.styles.grid_size_rows = len(rebase_items) + 1
+                    commit_grid.styles.grid_size_columns = 3
+                    commit_grid.styles.height = len(rebase_items) + 1
 
-                # commit rows
-                for i, item in enumerate(rebase_items):
-                    classes = []
-                    if i == self._active_index and self._state == "idle":
-                        classes.append("active")
-                    if self._selected[i]:
-                        classes.append("selected")
-                    classes = " ".join(classes)
+                    # header row
+                    yield Label("")
+                    yield Label("")
+                    yield Label("")
 
-                    yield Label(item.action, classes=f"rebase_action {classes}")
+                    # commit rows
+                    for i, item in enumerate(rebase_items):
+                        classes = []
+                        if i == self._active_index and self._state != "moving":
+                            classes.append("active")
+                        if self._selected[i]:
+                            classes.append("selected")
+                        classes = " ".join(classes)
 
-                    yield Label(item.commit.hexsha[:7], classes=f"hexsha {classes}")
+                        yield Label(item.action, classes=f"rebase_action {classes}")
 
-                    first_message_line = item.commit.message.split("\n")[0]
-                    yield Label(first_message_line, classes=f"commit_message {classes}")
+                        yield Label(item.commit.hexsha[:7], classes=f"hexsha {classes}")
 
-            with Grid(id="file_grid") as file_grid:
-                file_grid.styles.grid_columns = "auto"
-                file_grid.styles.grid_gutter_vertical = 1
-                file_grid.styles.grid_rows = "1"
-                file_grid.styles.grid_size_rows = len(rebase_items) + 1
-                file_grid.styles.grid_size_columns = len(self._visible_files)
-                # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
-                file_grid.styles.height = len(rebase_items) + 2
-                file_grid.styles.overflow_x = "auto"
-
-                # header row
-                for file in self._visible_files:
-                    yield FilenameLabel(file, classes="filename")
-
-                # commit rows
-                for i, item in enumerate(rebase_items):
-                    classes = []
-                    if i == self._active_index and self._state == "idle":
-                        classes.append("active")
-                    if self._selected[i]:
-                        classes.append("selected")
-                    classes = " ".join(classes)
-
-                    for j, file in enumerate(self._visible_files):
-                        file_change = item.file_changes.get(file)
-                        if file_change:
-                            selectable = True
-                            changed = file_change.modified
-                        else:
-                            selectable = False
-                            changed = False
-
-                        active = (
-                            i == self._active_index
-                            and j == self._active_file_index
-                            and isinstance(item, RebaseItem)
+                        first_message_line = item.commit.message.split("\n")[0]
+                        yield Label(
+                            first_message_line, classes=f"commit_message {classes}"
                         )
 
-                        yield FileChangeIndicator(
-                            changed, selectable, active, classes=classes
-                        )
+                with Grid(id="file_grid") as file_grid:
+                    file_grid.styles.grid_columns = "auto"
+                    file_grid.styles.grid_gutter_vertical = 1
+                    file_grid.styles.grid_rows = "1"
+                    file_grid.styles.grid_size_rows = len(rebase_items) + 1
+                    file_grid.styles.grid_size_columns = len(self._visible_files)
+                    # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
+                    file_grid.styles.height = len(rebase_items) + 2
+                    file_grid.styles.overflow_x = "auto"
+
+                    # header row
+                    for file in self._visible_files:
+                        yield FilenameLabel(file, classes="filename")
+
+                    # commit rows
+                    for i, item in enumerate(rebase_items):
+                        classes = []
+                        if i == self._active_index and self._state != "moving":
+                            classes.append("active")
+                        if self._selected[i]:
+                            classes.append("selected")
+                        classes = " ".join(classes)
+
+                        for j, file in enumerate(self._visible_files):
+                            file_change = item.file_changes.get(file)
+                            if file_change:
+                                selectable = True
+                                changed = file_change.modified
+                            else:
+                                selectable = False
+                                changed = False
+
+                            active = (
+                                i == self._active_index
+                                and j == self._active_file_index
+                                and isinstance(item, RebaseItem)
+                            )
+
+                            yield FileChangeIndicator(
+                                changed, selectable, active, classes=classes
+                            )
