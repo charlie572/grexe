@@ -1,6 +1,6 @@
 import os
 from copy import deepcopy
-from typing import List, Tuple, Literal
+from typing import List, Tuple, Literal, Optional
 
 from textual.containers import Horizontal, Grid
 from textual.events import Click, Key
@@ -9,6 +9,15 @@ from textual.widgets import Label
 
 from git_rebase_extended.types import RebaseItem, RebaseAction
 from git_rebase_extended.widgets import FilenameLabel, FileChangeIndicator
+
+
+def distribute_changes(
+    source_indices: List[int],
+    target_indices: List[int],
+    rebase_items: Tuple[RebaseItem, ...],
+) -> Tuple[RebaseItem, ...]:
+    print(source_indices, target_indices)
+    return deepcopy(rebase_items)
 
 
 class RebaseTodoWidget(Widget):
@@ -29,8 +38,9 @@ class RebaseTodoWidget(Widget):
         self._active_index = 0
         self._active_file_index = -1
         self._selected = [False] * len(rebase_items)
+        self._distribute_sources: Optional[List[int]] = None
 
-        self._state: Literal["idle", "moving"] = "idle"
+        self._state: Literal["idle", "moving", "selecting_distribute_targets"] = "idle"
 
         self._visible_files: List[str | os.PathLike[str]] = sum(
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
@@ -73,6 +83,8 @@ class RebaseTodoWidget(Widget):
             self.action_undo()
         if event.key == "ctrl+y":
             self.action_redo()
+        if event.key == "q":
+            self.action_distribute()
 
     @property
     def num_commits(self):
@@ -84,6 +96,33 @@ class RebaseTodoWidget(Widget):
     def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
         self._history = self._history[: self._history_index + 1] + [rebase_items]
         self._history_index += 1
+
+    def action_distribute(self):
+        if self._state == "idle":
+            self._distribute_sources = [
+                i for i in range(len(self._selected)) if self._selected[i]
+            ]
+            if len(self._distribute_sources) == 0:
+                return
+            self._selected = [False] * len(self._selected)
+            self._state = "selecting_distribute_targets"
+            self.refresh(recompose=True)
+        elif self._state == "selecting_distribute_targets":
+            distribute_targets = [
+                i for i in range(len(self._selected)) if self._selected[i]
+            ]
+            if len(self._distribute_sources) > 0:
+                self._set_rebase_items(
+                    distribute_changes(
+                        self._distribute_sources,
+                        distribute_targets,
+                        self.get_rebase_items(),
+                    )
+                )
+            self._selected = [False] * len(self._selected)
+            self._distribute_sources = None
+            self._state = "idle"
+            self.refresh(recompose=True)
 
     def action_undo(self):
         self._history_index = max(0, self._history_index - 1)
@@ -290,10 +329,7 @@ class RebaseTodoWidget(Widget):
             self.refresh(recompose=True)
 
     def action_move_up(self):
-        if self._state == "idle":
-            self._active_index = max(0, self._active_index - 1)
-            self.refresh(recompose=True)
-        elif self._state == "moving":
+        if self._state == "moving":
             rebase_items = list(deepcopy(self.get_rebase_items()))
             selected_indices = [i for i in range(self.num_commits) if self._selected[i]]
             if selected_indices[0] == 0:
@@ -308,14 +344,14 @@ class RebaseTodoWidget(Widget):
                 self._selected[i - 1] = True
 
             self.refresh(recompose=True)
+        else:
+            self._active_index = max(0, self._active_index - 1)
+            self.refresh(recompose=True)
 
     def action_move_down(self):
-        rebase_items = list(deepcopy(self.get_rebase_items()))
+        if self._state == "moving":
+            rebase_items = list(deepcopy(self.get_rebase_items()))
 
-        if self._state == "idle":
-            self._active_index = min(self.num_commits - 1, self._active_index + 1)
-            self.refresh(recompose=True)
-        elif self._state == "moving":
             selected_indices = self._get_selected(indices=True)
             if selected_indices[-1] == len(rebase_items) - 1:
                 return
@@ -328,6 +364,9 @@ class RebaseTodoWidget(Widget):
             for i in selected_indices:
                 self._selected[i + 1] = True
 
+            self.refresh(recompose=True)
+        else:
+            self._active_index = min(self.num_commits - 1, self._active_index + 1)
             self.refresh(recompose=True)
 
     def action_select(self):
@@ -400,7 +439,7 @@ class RebaseTodoWidget(Widget):
                 # commit rows
                 for i, item in enumerate(rebase_items):
                     classes = []
-                    if i == self._active_index and self._state == "idle":
+                    if i == self._active_index and self._state != "moving":
                         classes.append("active")
                     if self._selected[i]:
                         classes.append("selected")
@@ -430,7 +469,7 @@ class RebaseTodoWidget(Widget):
                 # commit rows
                 for i, item in enumerate(rebase_items):
                     classes = []
-                    if i == self._active_index and self._state == "idle":
+                    if i == self._active_index and self._state != "moving":
                         classes.append("active")
                     if self._selected[i]:
                         classes.append("selected")
