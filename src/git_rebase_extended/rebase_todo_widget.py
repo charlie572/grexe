@@ -2,7 +2,7 @@ import os
 from copy import deepcopy
 from typing import List, Tuple, Literal, Optional
 
-from textual.containers import Horizontal, Grid
+from textual.containers import Horizontal, Grid, Vertical
 from textual.events import Click, Key
 from textual.widget import Widget
 from textual.widgets import Label
@@ -422,74 +422,84 @@ class RebaseTodoWidget(Widget):
         # right half shows the file changes. The right half is scrollable horizontally. Both halves
         # are grid layouts.
 
-        with Horizontal():
-            with Grid(id="commit_grid") as commit_grid:
-                commit_grid.styles.grid_columns = "auto"
-                commit_grid.styles.grid_gutter_vertical = 2
-                commit_grid.styles.grid_rows = "1"
-                commit_grid.styles.grid_size_rows = len(rebase_items) + 1
-                commit_grid.styles.grid_size_columns = 3
-                commit_grid.styles.height = len(rebase_items) + 1
+        with Vertical():
+            status_text = (
+                "Select commits to distribute into..."
+                if self._state == "selecting_distribute_targets"
+                else ""
+            )
+            yield Label(status_text)
 
-                # header row
-                yield Label("")
-                yield Label("")
-                yield Label("")
+            with Horizontal():
+                with Grid(id="commit_grid") as commit_grid:
+                    commit_grid.styles.grid_columns = "auto"
+                    commit_grid.styles.grid_gutter_vertical = 2
+                    commit_grid.styles.grid_rows = "1"
+                    commit_grid.styles.grid_size_rows = len(rebase_items) + 1
+                    commit_grid.styles.grid_size_columns = 3
+                    commit_grid.styles.height = len(rebase_items) + 1
 
-                # commit rows
-                for i, item in enumerate(rebase_items):
-                    classes = []
-                    if i == self._active_index and self._state != "moving":
-                        classes.append("active")
-                    if self._selected[i]:
-                        classes.append("selected")
-                    classes = " ".join(classes)
+                    # header row
+                    yield Label("")
+                    yield Label("")
+                    yield Label("")
 
-                    yield Label(item.action, classes=f"rebase_action {classes}")
+                    # commit rows
+                    for i, item in enumerate(rebase_items):
+                        classes = []
+                        if i == self._active_index and self._state != "moving":
+                            classes.append("active")
+                        if self._selected[i]:
+                            classes.append("selected")
+                        classes = " ".join(classes)
 
-                    yield Label(item.commit.hexsha[:7], classes=f"hexsha {classes}")
+                        yield Label(item.action, classes=f"rebase_action {classes}")
 
-                    first_message_line = item.commit.message.split("\n")[0]
-                    yield Label(first_message_line, classes=f"commit_message {classes}")
+                        yield Label(item.commit.hexsha[:7], classes=f"hexsha {classes}")
 
-            with Grid(id="file_grid") as file_grid:
-                file_grid.styles.grid_columns = "auto"
-                file_grid.styles.grid_gutter_vertical = 1
-                file_grid.styles.grid_rows = "1"
-                file_grid.styles.grid_size_rows = len(rebase_items) + 1
-                file_grid.styles.grid_size_columns = len(self._visible_files)
-                # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
-                file_grid.styles.height = len(rebase_items) + 2
-                file_grid.styles.overflow_x = "auto"
-
-                # header row
-                for file in self._visible_files:
-                    yield FilenameLabel(file, classes="filename")
-
-                # commit rows
-                for i, item in enumerate(rebase_items):
-                    classes = []
-                    if i == self._active_index and self._state != "moving":
-                        classes.append("active")
-                    if self._selected[i]:
-                        classes.append("selected")
-                    classes = " ".join(classes)
-
-                    for j, file in enumerate(self._visible_files):
-                        file_change = item.file_changes.get(file)
-                        if file_change:
-                            selectable = True
-                            changed = file_change.modified
-                        else:
-                            selectable = False
-                            changed = False
-
-                        active = (
-                            i == self._active_index
-                            and j == self._active_file_index
-                            and isinstance(item, RebaseItem)
+                        first_message_line = item.commit.message.split("\n")[0]
+                        yield Label(
+                            first_message_line, classes=f"commit_message {classes}"
                         )
 
-                        yield FileChangeIndicator(
-                            changed, selectable, active, classes=classes
-                        )
+                with Grid(id="file_grid") as file_grid:
+                    file_grid.styles.grid_columns = "auto"
+                    file_grid.styles.grid_gutter_vertical = 1
+                    file_grid.styles.grid_rows = "1"
+                    file_grid.styles.grid_size_rows = len(rebase_items) + 1
+                    file_grid.styles.grid_size_columns = len(self._visible_files)
+                    # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
+                    file_grid.styles.height = len(rebase_items) + 2
+                    file_grid.styles.overflow_x = "auto"
+
+                    # header row
+                    for file in self._visible_files:
+                        yield FilenameLabel(file, classes="filename")
+
+                    # commit rows
+                    for i, item in enumerate(rebase_items):
+                        classes = []
+                        if i == self._active_index and self._state != "moving":
+                            classes.append("active")
+                        if self._selected[i]:
+                            classes.append("selected")
+                        classes = " ".join(classes)
+
+                        for j, file in enumerate(self._visible_files):
+                            file_change = item.file_changes.get(file)
+                            if file_change:
+                                selectable = True
+                                changed = file_change.modified
+                            else:
+                                selectable = False
+                                changed = False
+
+                            active = (
+                                i == self._active_index
+                                and j == self._active_file_index
+                                and isinstance(item, RebaseItem)
+                            )
+
+                            yield FileChangeIndicator(
+                                changed, selectable, active, classes=classes
+                            )
