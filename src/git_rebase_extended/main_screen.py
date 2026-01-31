@@ -29,6 +29,9 @@ class MainScreen(Screen):
         self._file_selector = FileSelector(self._files)
         self._file_selector.styles.width = "50%"
 
+    def get_rebase_items(self) -> List[RebaseItem]:
+        return self._rebase_todo_widget.get_rebase_items()
+
     def on_file_selector_changed_active_files(self, event):
         self._rebase_todo_widget.set_visible_files(event.active_files)
 
