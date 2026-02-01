@@ -4,9 +4,9 @@ from typing import List
 from textual.containers import Horizontal
 from textual.screen import Screen
 
-from grex.file_selector import FileSelector
-from grex.rebase_todo_widget import RebaseTodoWidget
-from grex.types import RebaseItem
+from grexe.file_selector import FileSelector
+from grexe.rebase_todo_widget import RebaseTodoWidget
+from grexe.types import RebaseItem
 
 
 class MainScreen(Screen):

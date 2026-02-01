@@ -7,9 +7,9 @@ from textual.events import Click, Key
 from textual.widget import Widget
 from textual.widgets import Label
 
-from grex.distribute import distribute_changes
-from grex.types import RebaseItem, RebaseAction
-from grex.widgets import FilenameLabel, FileChangeIndicator
+from grexe.distribute import distribute_changes
+from grexe.types import RebaseItem, RebaseAction
+from grexe.widgets import FilenameLabel, FileChangeIndicator
 
 
 class RebaseTodoWidget(Widget):

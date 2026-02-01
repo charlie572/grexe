@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import List, Tuple
 
-from grex.types import RebaseItem
+from grexe.types import RebaseItem
 
 
 def get_modified_file_paths(rebase_item: RebaseItem):

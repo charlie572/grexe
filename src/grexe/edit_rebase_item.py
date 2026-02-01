@@ -2,7 +2,7 @@ import argparse
 
 from git import Repo
 
-from grex.types import REBASE_ACTIONS
+from grexe.types import REBASE_ACTIONS
 
 
 def main():
