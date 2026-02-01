@@ -1,9 +1,8 @@
 import argparse
-import sys
 
 from git import Repo
 
-from git_rebase_extended.types import REBASE_ACTIONS
+from grex.types import REBASE_ACTIONS
 
 
 def main():

@@ -4,9 +4,9 @@ from typing import List, Optional
 from git import Repo
 from textual.app import App
 
-from git_rebase_extended.main_screen import MainScreen
-from git_rebase_extended.rebasing import parse_rebase_items, create_rebase_todo_text
-from git_rebase_extended.types import RebaseItem
+from grex.main_screen import MainScreen
+from grex.rebasing import parse_rebase_items, create_rebase_todo_text
+from grex.types import RebaseItem
 
 
 class GitRebaseExtendedEditor(App):

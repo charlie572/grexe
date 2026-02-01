@@ -4,9 +4,9 @@ from typing import List
 from textual.containers import Horizontal
 from textual.screen import Screen
 
-from git_rebase_extended.file_selector import FileSelector
-from git_rebase_extended.rebase_todo_widget import RebaseTodoWidget
-from git_rebase_extended.types import RebaseItem
+from grex.file_selector import FileSelector
+from grex.rebase_todo_widget import RebaseTodoWidget
+from grex.types import RebaseItem
 
 
 class MainScreen(Screen):

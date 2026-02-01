@@ -7,9 +7,9 @@ from textual.events import Click, Key
 from textual.widget import Widget
 from textual.widgets import Label
 
-from git_rebase_extended.distribute import distribute_changes
-from git_rebase_extended.types import RebaseItem, RebaseAction
-from git_rebase_extended.widgets import FilenameLabel, FileChangeIndicator
+from grex.distribute import distribute_changes
+from grex.types import RebaseItem, RebaseAction
+from grex.widgets import FilenameLabel, FileChangeIndicator
 
 
 class RebaseTodoWidget(Widget):

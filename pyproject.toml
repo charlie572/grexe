@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "git-rebase-extended"
+name = "grex"
 version = "0.0.1"
 requires-python = ">=3.13.1"
 authors = [
@@ -21,8 +21,8 @@ classifiers = [
 Repository = "https://github.com/me/spam.git"
 
 [project.scripts]
-git-rebase-extended-editor = "git_rebase_extended.editor:main"
-edit-rebase-item = "git_rebase_extended.edit_rebase_item:main"
+grex-editor = "grex.editor:main"
+grex-edit-rebase-item = "grex.edit_rebase_item:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

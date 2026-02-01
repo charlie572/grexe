@@ -5,7 +5,7 @@ from typing import List, Optional, Counter
 
 from git import Repo
 
-from git_rebase_extended.types import RebaseItem
+from grex.types import RebaseItem
 
 
 def check_rebase_is_valid(rebase_items: List[RebaseItem]) -> List[str]:
@@ -65,7 +65,7 @@ def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
             rebase_todo_text += f"drop {item.commit.hexsha[:7]} {first_message_line}\n"
         else:
             # This rebase item only contains a subset of the files of the original commit. Pick the
-            # commit, then call edit-rebase-item in an exec command. The edit-rebase-item command will
+            # commit, then call grex-edit-rebase-item in an exec command. The edit-rebase-item command will
             # edit the commit to only include the specified files, and apply the specified rebase action.
 
             rebase_todo_text += f"pick {item.commit.hexsha[:7]} {first_message_line}\n"
@@ -74,7 +74,7 @@ def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
                 change.path for change in item.file_changes.values() if change.modified
             )
             rebase_todo_text += (
-                f"exec edit-rebase-item -a {item.action} {changed_files}\n"
+                f"exec grex-edit-rebase-item -a {item.action} {changed_files}\n"
             )
 
     return rebase_todo_text

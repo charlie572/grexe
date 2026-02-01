@@ -1,8 +1,7 @@
-import pickle
 from copy import deepcopy
 from typing import List, Tuple
 
-from git_rebase_extended.types import RebaseItem
+from grex.types import RebaseItem
 
 
 def get_modified_file_paths(rebase_item: RebaseItem):
