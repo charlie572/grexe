@@ -7,6 +7,9 @@ Features:
 - Select and move commits.
 - Change rebase actions (pick, fixup, etc.).
 - View the files that each commit changes.
+- View the file hierarchy
+- Split commits and squash them into other commits.
+- Automatically match up commits that modify the same files, and squash them together (see Distribute Changes below).
 
 # Controls
 
