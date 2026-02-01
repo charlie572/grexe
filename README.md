@@ -11,6 +11,8 @@ Features:
 - Split commits and squash them into other commits.
 - Automatically match up commits that modify the same files, and squash them together (see Distribute Changes below).
 
+![Screenshot of main UI.](images/main_screenshot.png)
+
 # Controls
 
 ## Basic controls
