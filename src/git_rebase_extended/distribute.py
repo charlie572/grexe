@@ -18,10 +18,8 @@ def distribute_changes(
 ) -> Tuple[Tuple[RebaseItem, ...] | None, str | None]:
     """Split the changes from some source commits, and squash them into some target commits"""
 
-    # TODO: handle case where some of the target commits are squashed into each other.
-
-    with open("distribute_changes", "wb") as f:
-        pickle.dump((source_indices, target_indices, rebase_items), f)
+    source_indices = list(sorted(source_indices))
+    target_indices = list(sorted(target_indices))
 
     # check that source and target are disjoint
     intersection = set(source_indices).intersection(target_indices)
@@ -51,22 +49,39 @@ def distribute_changes(
         )
 
     result: List[RebaseItem] = []
-    for i, item in enumerate(rebase_items):
+    i = 0
+    while i < len(rebase_items):
+        item = rebase_items[i]
+
         if i not in target_indices:
             new_item = deepcopy(item)
             if i in source_indices:
                 new_item.action = "drop"
             result.append(new_item)
+            i += 1
             continue
 
         # add target commit
         target_item = rebase_items[i]
         result.append(target_item)
 
+        # Advance past items that are squashed into this target item. Put the new items
+        # after them.
+        i += 1
+        source_indices_already_squashed = set()
+        while i < len(rebase_items) and rebase_items[i].action in ("fixup", "squash"):
+            if i in source_indices:
+                source_indices_already_squashed.add(i)
+            result.append(deepcopy(rebase_items[i]))
+            i += 1
+
         target_file_paths = set(get_modified_file_paths(target_item))
 
-        # squash source file changes into this target commit
+        # Squash source file changes into this target commit (after the items we just skipped over).
         for source_index in source_indices:
+            if source_index in source_indices_already_squashed:
+                continue
+
             # get file changes to squash
             source_item = rebase_items[source_index]
             source_file_paths = set(get_modified_file_paths(source_item))
