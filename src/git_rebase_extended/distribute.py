@@ -91,9 +91,9 @@ def distribute_changes(
 
             # add fixup to squash changes into target commit
             fixup: RebaseItem = deepcopy(source_item)
-            fixup.action = "fixup"
+            fixup.action = "squash"
             for file_path, file_change in fixup.file_changes.items():
                 file_change.modified = file_path in paths_to_squash
             result.append(fixup)
 
-    return result, None
+    return tuple(result), None
