@@ -111,7 +111,7 @@ class RebaseTodoWidget(Widget):
                     self.get_rebase_items(),
                 )
                 if error is not None:
-                    self.notify(error)
+                    self.notify(error, severity="error", timeout=10)
                 else:
                     self._set_rebase_items(distributed_items)
             self._selected = [False] * self.num_commits

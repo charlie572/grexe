@@ -15,7 +15,7 @@ def distribute_changes(
     source_indices: List[int],
     target_indices: List[int],
     rebase_items: Tuple[RebaseItem, ...],
-) -> [Tuple[RebaseItem, ...] | None, str | None]:
+) -> Tuple[Tuple[RebaseItem, ...] | None, str | None]:
     """Split the changes from some source commits, and squash them into some target commits"""
 
     # TODO: handle case where some of the target commits are squashed into each other.
@@ -30,7 +30,7 @@ def distribute_changes(
         return None, f"{', '.join(intersect_shas)} are in both source and target set."
 
     # Check for any file changes with ambiguous target commits.
-    source_files = set(
+    all_source_files = set(
         sum(
             [get_modified_file_paths(rebase_items[i]) for i in source_indices], start=[]
         )
@@ -39,8 +39,9 @@ def distribute_changes(
     ambiguous_files = set()
     for target_index in target_indices:
         target_files = get_modified_file_paths(rebase_items[target_index])
-        common_files = source_files.intersection(target_files)
+        common_files = all_source_files.intersection(target_files)
         ambiguous_files.update(target_files_seen.intersection(common_files))
+        target_files_seen.update(common_files)
     if len(ambiguous_files) > 0:
         return (
             None,
