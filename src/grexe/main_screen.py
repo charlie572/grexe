@@ -3,6 +3,7 @@ from typing import List
 
 from textual.containers import Horizontal
 from textual.screen import Screen
+from textual.widgets import TabbedContent, Label
 
 from grexe.file_selector import FileSelector
 from grexe.rebase_todo_widget import RebaseTodoWidget
@@ -36,6 +37,10 @@ class MainScreen(Screen):
         self._rebase_todo_widget.set_visible_files(event.active_files)
 
     def compose(self):
-        with Horizontal():
-            yield self._file_selector
-            yield self._rebase_todo_widget
+        with TabbedContent():
+            with Horizontal():
+                yield self._file_selector
+                yield self._rebase_todo_widget
+
+            with Horizontal():
+                yield Label("Second tab")
