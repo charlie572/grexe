@@ -4,6 +4,7 @@ from typing import List, Tuple, Literal, Optional
 
 from textual.containers import Horizontal, Grid, Vertical
 from textual.events import Click, Key
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Label
 
@@ -15,9 +16,15 @@ from grexe.widgets import FilenameLabel, FileChangeIndicator
 class RebaseTodoWidget(Widget):
     CSS_PATH = "main.tcss"
 
+    class ChangedActiveItem(Message):
+        def __init__(self, active_item: RebaseItem):
+            self.active_item = active_item
+            super().__init__()
+
     def __init__(
         self,
         rebase_items: List[RebaseItem],
+        show_files: bool,
         *args,
         **kwargs,
     ):
@@ -31,6 +38,8 @@ class RebaseTodoWidget(Widget):
         self._active_file_index = -1
         self._selected = [False] * len(rebase_items)
         self._distribute_sources: Optional[List[int]] = None
+
+        self._show_files = show_files
 
         self._state: Literal["idle", "moving", "selecting_distribute_targets"] = "idle"
 
@@ -89,6 +98,11 @@ class RebaseTodoWidget(Widget):
     def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
         self._history = self._history[: self._history_index + 1] + [rebase_items]
         self._history_index += 1
+
+    def _set_active_index(self, index):
+        self._active_index = index
+        active_item = self.get_rebase_items()[self._active_index]
+        self.post_message(self.ChangedActiveItem(active_item))
 
     def action_distribute(self):
         if self._state == "idle":
@@ -190,8 +204,27 @@ class RebaseTodoWidget(Widget):
             self._last_hovered_file = None
 
     def on_click(self, event: Click):
+        # check if a commit was clicked
+        commit_grid = self.query_one("#commit_grid")
+        for child_index, child in enumerate(commit_grid.children):
+            if child is not event.widget:
+                continue
+
+            # Commit was clicked. Select it.
+            commit_index = child_index // 3 - 1
+            self._set_active_index(commit_index)
+            self._selected = [False] * self.num_commits
+            self._selected[commit_index] = True
+
+            self.refresh(recompose=True)
+            return
+
         # check if a file was clicked
-        file_grid = self.query_one("#file_grid")
+        query_result = self.query("#file_grid")
+        if len(query_result) == 0:
+            return
+
+        file_grid = query_result[0]
         for child_index, child in enumerate(file_grid.children):
             if child is not event.widget:
                 continue
@@ -209,11 +242,6 @@ class RebaseTodoWidget(Widget):
                 # This file change isn't included in this commit. It is a blank space in the UI. Do nothing.
                 return
 
-            # select commit
-            self._active_index = commit_index
-            self._selected = [False] * self.num_commits
-            self._selected[commit_index] = True
-
             # select file
             self._active_file_index = file_index
 
@@ -221,18 +249,8 @@ class RebaseTodoWidget(Widget):
             file_change.modified = not file_change.modified
             self._set_rebase_items(rebase_items)
 
-            self.refresh(recompose=True)
-            return
-
-        # check if a commit was clicked
-        commit_grid = self.query_one("#commit_grid")
-        for child_index, child in enumerate(commit_grid.children):
-            if child is not event.widget:
-                continue
-
-            # Commit was clicked. Select it.
-            commit_index = child_index // 3 - 1
-            self._active_index = commit_index
+            # select commit
+            self._set_active_index(commit_index)
             self._selected = [False] * self.num_commits
             self._selected[commit_index] = True
 
@@ -316,7 +334,7 @@ class RebaseTodoWidget(Widget):
         elif self._state == "moving":
             selected_indices = self._get_selected(indices=True)
 
-            self._active_index = selected_indices[0]
+            self._set_active_index(selected_indices[0])
             self._selected[:] = [False] * self.num_commits
 
             self._state = "idle"
@@ -340,7 +358,7 @@ class RebaseTodoWidget(Widget):
 
             self.refresh(recompose=True)
         else:
-            self._active_index = max(0, self._active_index - 1)
+            self._set_active_index(max(0, self._active_index - 1))
             self.refresh(recompose=True)
 
     def action_move_down(self):
@@ -361,7 +379,7 @@ class RebaseTodoWidget(Widget):
 
             self.refresh(recompose=True)
         else:
-            self._active_index = min(self.num_commits - 1, self._active_index + 1)
+            self._set_active_index(min(self.num_commits - 1, self._active_index + 1))
             self.refresh(recompose=True)
 
     def action_select(self):
@@ -430,15 +448,18 @@ class RebaseTodoWidget(Widget):
                     rebase_items,
                     self._active_index if self._state != "moving" else None,
                     self._selected,
+                    id="commit_grid",
                 )
 
-                yield FileGrid(
-                    rebase_items,
-                    self._active_index if self._state != "moving" else None,
-                    self._active_file_index,
-                    self._selected,
-                    self._visible_files,
-                )
+                if self._show_files:
+                    yield FileGrid(
+                        rebase_items,
+                        self._active_index if self._state != "moving" else None,
+                        self._active_file_index,
+                        self._selected,
+                        self._visible_files,
+                        id="file_grid",
+                    )
 
 
 class CommitGrid(Grid):

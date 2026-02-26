@@ -25,7 +25,7 @@ class MainScreen(Screen):
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
 
-        self._rebase_todo_widget = RebaseTodoWidget(rebase_items)
+        self._rebase_todo_widget = RebaseTodoWidget(rebase_items, False)
         self._rebase_todo_widget.styles.width = "50%"
         self._file_selector = FileSelector(self._files)
         self._file_selector.styles.width = "50%"
@@ -33,8 +33,13 @@ class MainScreen(Screen):
     def get_rebase_items(self) -> List[RebaseItem]:
         return self._rebase_todo_widget.get_rebase_items()
 
-    def on_file_selector_changed_active_files(self, event):
-        self._rebase_todo_widget.set_visible_files(event.active_files)
+    def on_rebase_todo_widget_changed_active_item(self, event):
+        files = list(event.active_item.commit.stats.files.keys())
+        self._file_selector = FileSelector(files)
+        self.refresh(recompose=True)
+
+    # def on_file_selector_changed_active_files(self, event):
+    #     self._rebase_todo_widget.set_visible_files(event.active_files)
 
     def compose(self):
         with TabbedContent():
