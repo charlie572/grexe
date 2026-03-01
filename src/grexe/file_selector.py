@@ -10,6 +10,8 @@ from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets._tree import TreeNode, TreeDataType
 
+from grexe.types import FileChange
+
 
 class FileSelector(Tree):
     class ChangedActiveFiles(Message):
@@ -19,10 +21,11 @@ class FileSelector(Tree):
 
     def __init__(
         self,
-        file_paths: List[str | PathLike],
+        file_changes: List[FileChange],
         *args,
         **kwargs,
     ):
+        file_paths = [change.path for change in file_changes]
         self._common_path = os.path.commonpath(file_paths)
 
         super().__init__(
@@ -41,10 +44,10 @@ class FileSelector(Tree):
         if len(file_paths) < 2:
             return
 
-        file_paths = [os.path.relpath(path, self._common_path) for path in file_paths]
         nodes: Dict[str : TreeNode[str]] = {"": self.root}
-        for path in file_paths:
-            path_elements = path.split(os.path.sep)
+        for file_change in file_changes:
+            rel_path = os.path.relpath(file_change.path, self._common_path)
+            path_elements = rel_path.split(os.path.sep)
             for i in range(len(path_elements)):
                 node_path = os.path.sep.join(path_elements[: i + 1])
                 if node_path not in nodes:
@@ -57,7 +60,7 @@ class FileSelector(Tree):
                         allow_expand=False,
                         data={
                             "path": node_path,
-                            "active": True,
+                            "active": file_change.modified,
                         },
                     )
 

@@ -95,6 +95,9 @@ class RebaseTodoWidget(Widget):
     def get_rebase_items(self):
         return self._history[self._history_index]
 
+    def get_active_item(self) -> RebaseItem:
+        return self.get_rebase_items()[self._active_index]
+
     def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
         self._history = self._history[: self._history_index + 1] + [rebase_items]
         self._history_index += 1
