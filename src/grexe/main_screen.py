@@ -34,9 +34,14 @@ class MainScreen(Screen):
         return self._rebase_todo_widget.get_rebase_items()
 
     def on_rebase_todo_widget_changed_active_item(self, event):
+        # re-create file selector with files of new active commit
         files = list(event.active_item.commit.stats.files.keys())
         self._file_selector = FileSelector(files)
+
+        # refresh screen without de-focussing widgets
+        focussed_widget = self.focused
         self.refresh(recompose=True)
+        focussed_widget.focus()
 
     # def on_file_selector_changed_active_files(self, event):
     #     self._rebase_todo_widget.set_visible_files(event.active_files)
