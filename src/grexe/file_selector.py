@@ -19,7 +19,7 @@ class FileSelector(Tree):
 
     def __init__(
         self,
-        file_paths: Iterable[str | PathLike],
+        file_paths: List[str | PathLike],
         *args,
         **kwargs,
     ):
@@ -34,6 +34,12 @@ class FileSelector(Tree):
 
         self.root.expand()
         self.root.allow_expand = False
+
+        self._ctrl = False
+        self._mouse_button = None
+
+        if len(file_paths) < 2:
+            return
 
         file_paths = [os.path.relpath(path, self._common_path) for path in file_paths]
         nodes: Dict[str : TreeNode[str]] = {"": self.root}
@@ -54,9 +60,6 @@ class FileSelector(Tree):
                             "active": True,
                         },
                     )
-
-        self._ctrl = False
-        self._mouse_button = None
 
     def on_click(self, event: Click):
         self._mouse_button = event.button
