@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from os import PathLike
-from typing import Literal, List
+from typing import Literal
 
 from git import Commit
 

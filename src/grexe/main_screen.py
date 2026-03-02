@@ -6,8 +6,8 @@ from textual.screen import Screen
 from textual.widgets import TabbedContent, Label
 
 from grexe.file_selector import FileSelector
+from grexe.rebase_todo_state import RebaseTodoState
 from grexe.rebase_todo_widget import RebaseTodoWidget
-from grexe.types import RebaseItem
 
 
 class MainScreen(Screen):
@@ -15,17 +15,13 @@ class MainScreen(Screen):
 
     def __init__(
         self,
-        rebase_items: List[RebaseItem],
+        rebase_todo_state: RebaseTodoState,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self._files: List[str | os.PathLike[str]] = sum(
-            [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
-        )
-
-        self._rebase_todo_widget = RebaseTodoWidget(rebase_items, False)
+        self._rebase_todo_widget = RebaseTodoWidget(rebase_todo_state, False)
         self._rebase_todo_widget.styles.width = "50%"
 
         file_changes = list(
@@ -34,9 +30,6 @@ class MainScreen(Screen):
 
         self._file_selector = FileSelector(file_changes)
         self._file_selector.styles.width = "50%"
-
-    def get_rebase_items(self) -> List[RebaseItem]:
-        return self._rebase_todo_widget.get_rebase_items()
 
     def on_rebase_todo_widget_changed_active_item(self, event):
         # re-create file selector with files of new active commit

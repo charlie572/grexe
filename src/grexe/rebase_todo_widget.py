@@ -10,6 +10,7 @@ from textual.widgets import Label
 
 from grexe.distribute import distribute_changes
 from grexe.types import RebaseItem, RebaseAction
+from grexe.rebase_todo_state import RebaseTodoState, RebaseTodoStateAndCursor
 from grexe.widgets import FilenameLabel, FileChangeIndicator
 
 
@@ -17,13 +18,14 @@ class RebaseTodoWidget(Widget):
     CSS_PATH = "main.tcss"
 
     class ChangedActiveItem(Message):
-        def __init__(self, active_item: RebaseItem):
+        def __init__(self, cursor: int, active_item: RebaseItem):
+            self.cursor = cursor
             self.active_item = active_item
             super().__init__()
 
     def __init__(
         self,
-        rebase_items: List[RebaseItem],
+        rebase_todo_state: RebaseTodoState,
         show_files: bool,
         *args,
         **kwargs,
@@ -32,23 +34,28 @@ class RebaseTodoWidget(Widget):
 
         self.can_focus = True
 
-        self._history: List[Tuple[RebaseItem, ...]] = [tuple(rebase_items)]
-        self._history_index = 0
-        self._active_index = 0
+        self._todo_state = RebaseTodoStateAndCursor(
+            rebase_todo_state,
+            self._on_changed_active_item,
+        )
+
         self._active_file_index = -1
-        self._selected = [False] * len(rebase_items)
         self._distribute_sources: Optional[List[int]] = None
 
         self._show_files = show_files
 
         self._state: Literal["idle", "moving", "selecting_distribute_targets"] = "idle"
 
+        rebase_items = rebase_todo_state.get_original_items()
         self._visible_files: List[str | os.PathLike[str]] = sum(
             [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
         )
         self._visible_files = list(set(self._visible_files))
 
         self._last_hovered_file = None
+
+    def _on_changed_active_item(self, cursor: int, active_item: RebaseItem):
+        self.post_message(self.ChangedActiveItem(cursor, active_item))
 
     def on_key(self, event: Key):
         if event.key == "j":
@@ -82,69 +89,38 @@ class RebaseTodoWidget(Widget):
         if event.key == "ctrl+a":
             self.action_select_all()
         if event.key == "ctrl+z":
-            self.action_undo()
+            self._todo_state.undo()
+            self.refresh(recompose=True)
         if event.key == "ctrl+y":
-            self.action_redo()
+            self._todo_state.redo()
+            self.refresh(recompose=True)
         if event.key == "q":
             self.action_distribute()
 
-    @property
-    def num_commits(self):
-        return len(self._history[self._history_index])
-
-    def get_rebase_items(self):
-        return self._history[self._history_index]
-
-    def get_active_item(self) -> RebaseItem:
-        return self.get_rebase_items()[self._active_index]
-
-    def _set_rebase_items(self, rebase_items: Tuple[RebaseItem, ...]):
-        self._history = self._history[: self._history_index + 1] + [rebase_items]
-        self._history_index += 1
-
-    def _set_active_index(self, index):
-        self._active_index = index
-        active_item = self.get_rebase_items()[self._active_index]
-        self.post_message(self.ChangedActiveItem(active_item))
-
     def action_distribute(self):
         if self._state == "idle":
-            self._distribute_sources = [
-                i for i in range(len(self._selected)) if self._selected[i]
-            ]
+            self._distribute_sources = self._todo_state.get_selected_indices()
             if len(self._distribute_sources) == 0:
                 return
-            self._selected = [False] * len(self._selected)
+            self._todo_state.select_none()
             self._state = "selecting_distribute_targets"
             self.refresh(recompose=True)
         elif self._state == "selecting_distribute_targets":
-            distribute_targets = [
-                i for i in range(len(self._selected)) if self._selected[i]
-            ]
+            distribute_targets = self._todo_state.get_selected_indices()
             if len(self._distribute_sources) > 0:
                 distributed_items, error = distribute_changes(
                     self._distribute_sources,
                     distribute_targets,
-                    self.get_rebase_items(),
+                    self._todo_state.get_current_items(),
                 )
                 if error is not None:
                     self.notify(error, severity="error", timeout=10)
                 else:
-                    self._set_rebase_items(distributed_items)
-            self._selected = [False] * self.num_commits
+                    self._todo_state.modify_items(distributed_items)
+            self._todo_state.select_none()
             self._distribute_sources = None
             self._state = "idle"
             self.refresh(recompose=True)
-
-    def action_undo(self):
-        self._history_index = max(0, self._history_index - 1)
-        self._selected = [False] * len(self._history[self._history_index])
-        self.refresh(recompose=True)
-
-    def action_redo(self):
-        self._history_index = min(self.num_commits - 1, self._history_index + 1)
-        self._selected = [False] * len(self._history[self._history_index])
-        self.refresh(recompose=True)
 
     def _get_items_to_modify(self, rebase_items=None):
         """Get the rebase items to modify
@@ -157,11 +133,11 @@ class RebaseTodoWidget(Widget):
         cursor).
         """
         if rebase_items is None:
-            rebase_items = self.get_rebase_items()
+            rebase_items = self._todo_state.get_current_items()
 
         selected_items = self._get_selected(rebase_items)
         if len(selected_items) == 0:
-            return [rebase_items[self._active_index]]
+            return [rebase_items[self._todo_state.cursor]]
         else:
             return selected_items
 
@@ -177,23 +153,26 @@ class RebaseTodoWidget(Widget):
         """
         selected_indices = self._get_selected(indices=True)
         if len(selected_indices) == 0:
-            return [self._active_index]
+            return [self._todo_state.cursor]
         else:
             return selected_indices
 
     def _get_selected(self, rebase_items=None, indices=False):
         if rebase_items is None:
-            rebase_items = self.get_rebase_items()
+            rebase_items = self._todo_state.get_current_items()
 
         result = []
         for i, item in enumerate(rebase_items):
-            if self._selected[i]:
+            if self._todo_state.is_selected(i):
                 if indices:
                     result.append(i)
                 else:
                     result.append(item)
 
         return result
+
+    def get_active_item(self):
+        return self._todo_state.get_active_item()
 
     def on_mouse_move(self, event):
         # Show a message with the full path of the file the user is hovering over. Use
@@ -215,9 +194,8 @@ class RebaseTodoWidget(Widget):
 
             # Commit was clicked. Select it.
             commit_index = child_index // 3 - 1
-            self._set_active_index(commit_index)
-            self._selected = [False] * self.num_commits
-            self._selected[commit_index] = True
+            self._todo_state.set_cursor(commit_index)
+            self._todo_state.select_single(commit_index)
 
             self.refresh(recompose=True)
             return
@@ -238,7 +216,7 @@ class RebaseTodoWidget(Widget):
             file_index = child_index % len(self._visible_files)
 
             # get file change object
-            rebase_items = self.get_rebase_items()
+            rebase_items = self._todo_state.get_current_items()
             file = self._visible_files[file_index]
             file_change = rebase_items[commit_index].file_changes.get(file)
             if file_change is None:
@@ -250,39 +228,34 @@ class RebaseTodoWidget(Widget):
 
             # toggle file
             file_change.modified = not file_change.modified
-            self._set_rebase_items(rebase_items)
+            self._todo_state.modify_items(rebase_items)
 
             # select commit
-            self._set_active_index(commit_index)
-            self._selected = [False] * self.num_commits
-            self._selected[commit_index] = True
+            self._todo_state.set_cursor(commit_index)
+            self._todo_state.select_single(commit_index)
 
             self.refresh(recompose=True)
             return
 
     def action_copy(self):
-        rebase_items = list(deepcopy(self.get_rebase_items()))
-        active_item = rebase_items[self._active_index]
-
-        rebase_items.insert(self._active_index + 1, deepcopy(active_item))
-        self._selected.insert(self._active_index + 1, False)
-
-        self._set_rebase_items(tuple(rebase_items))
+        self._todo_state.insert_item(
+            self._todo_state.get_active_item(), self._todo_state.cursor
+        )
         self.refresh(recompose=True)
 
     def action_toggle_file(self):
-        rebase_items = list(deepcopy(self.get_rebase_items()))
-        active_item: RebaseItem = rebase_items[self._active_index]
+        rebase_items = list(deepcopy(self._todo_state.get_current_items()))
+        active_item: RebaseItem = rebase_items[self._todo_state.cursor]
 
         file = self._visible_files[self._active_file_index]
         file_change = active_item.file_changes[file]
         file_change.modified = not file_change.modified
 
-        self._set_rebase_items(tuple(rebase_items))
+        self._todo_state.modify_items(tuple(rebase_items))
         self.refresh(recompose=True)
 
     def action_move_left(self):
-        active_item = self.get_rebase_items()[self._active_index]
+        active_item = self._todo_state.get_current_items()[self._todo_state.cursor]
         if not isinstance(active_item, RebaseItem):
             return
 
@@ -296,7 +269,7 @@ class RebaseTodoWidget(Widget):
         self.refresh(recompose=True)
 
     def action_move_right(self):
-        active_item = self.get_rebase_items()[self._active_index]
+        active_item = self._todo_state.get_current_items()[self._todo_state.cursor]
         if not isinstance(active_item, RebaseItem):
             return
 
@@ -315,7 +288,7 @@ class RebaseTodoWidget(Widget):
 
     def action_move_commits(self):
         if self._state == "idle":
-            rebase_items = list(deepcopy(self.get_rebase_items()))
+            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
 
             # remove selected widgets
             indices_to_move = self._get_indices_to_modify()
@@ -326,19 +299,20 @@ class RebaseTodoWidget(Widget):
             for item in items_to_move:
                 rebase_items.insert(dest_index, item)
 
-            self._selected[:] = [False] * self.num_commits
+            selected = [False] * self._todo_state.get_current_num_items()
             for i in range(dest_index, dest_index + len(items_to_move)):
-                self._selected[i] = True
+                selected[i] = True
+            self._todo_state.set_selected(selected)
 
             self._state = "moving"
 
-            self._set_rebase_items(tuple(rebase_items))
+            self._todo_state.modify_items(tuple(rebase_items))
             self.refresh(recompose=True)
         elif self._state == "moving":
             selected_indices = self._get_selected(indices=True)
 
-            self._set_active_index(selected_indices[0])
-            self._selected[:] = [False] * self.num_commits
+            self._todo_state.set_cursor(selected_indices[0])
+            self._todo_state.select_none()
 
             self._state = "idle"
 
@@ -346,27 +320,28 @@ class RebaseTodoWidget(Widget):
 
     def action_move_up(self):
         if self._state == "moving":
-            rebase_items = list(deepcopy(self.get_rebase_items()))
-            selected_indices = [i for i in range(self.num_commits) if self._selected[i]]
+            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
+            selected_indices = self._todo_state.get_selected_indices()
             if selected_indices[0] == 0:
                 return
 
             item_before_selected = rebase_items.pop(selected_indices[0] - 1)
             rebase_items.insert(selected_indices[-1], item_before_selected)
-            self._set_rebase_items(tuple(rebase_items))
+            self._todo_state.modify_items(tuple(rebase_items))
 
-            self._selected[:] = [False] * self.num_commits
+            selected = [False] * self._todo_state.get_current_num_items()
             for i in selected_indices:
-                self._selected[i - 1] = True
+                selected[i - 1] = True
+            self._todo_state.set_selected(selected)
 
             self.refresh(recompose=True)
         else:
-            self._set_active_index(max(0, self._active_index - 1))
+            self._todo_state.move_cursor("dec")
             self.refresh(recompose=True)
 
     def action_move_down(self):
         if self._state == "moving":
-            rebase_items = list(deepcopy(self.get_rebase_items()))
+            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
 
             selected_indices = self._get_selected(indices=True)
             if selected_indices[-1] == len(rebase_items) - 1:
@@ -374,39 +349,39 @@ class RebaseTodoWidget(Widget):
 
             item_after_selected = rebase_items.pop(selected_indices[-1] + 1)
             rebase_items.insert(selected_indices[0], item_after_selected)
-            self._set_rebase_items(tuple(rebase_items))
+            self._todo_state.modify_items(tuple(rebase_items))
 
-            self._selected[:] = [False] * len(self._selected)
+            selected = [False] * self._todo_state.get_current_num_items()
             for i in selected_indices:
-                self._selected[i + 1] = True
+                selected[i + 1] = True
+            self._todo_state.set_selected(selected)
 
             self.refresh(recompose=True)
         else:
-            self._set_active_index(min(self.num_commits - 1, self._active_index + 1))
+            self._todo_state.move_cursor("inc")
             self.refresh(recompose=True)
 
     def action_select(self):
-        self._selected[self._active_index] = not self._selected[self._active_index]
+        self._todo_state.toggle_active_item()
         self.refresh(recompose=True)
 
     def action_select_all(self):
         if self._state != "idle":
             return
 
-        selected = not self._selected[self._active_index]
-        self._selected[:] = [selected] * self.num_commits
+        self._todo_state.toggle_select_all_or_none()
         self.refresh(recompose=True)
 
     def _set_rebase_action(self, action: RebaseAction):
         if self._state != "idle":
             return
 
-        rebase_items = deepcopy(self.get_rebase_items())
+        rebase_items = deepcopy(self._todo_state.get_current_items())
 
         for item in self._get_items_to_modify(rebase_items):
             item.action = action
 
-        self._set_rebase_items(rebase_items)
+        self._todo_state.modify_items(rebase_items)
         self.refresh(recompose=True)
 
     def action_edit(self):
@@ -432,7 +407,7 @@ class RebaseTodoWidget(Widget):
         self.refresh(recompose=True)
 
     def compose(self):
-        rebase_items = self.get_rebase_items()
+        rebase_items = self._todo_state.get_current_items()
 
         # The left half of the widget shows the rebase actions, hashes, and commit messages. The
         # right half shows the file changes. The right half is scrollable horizontally. Both halves
@@ -449,17 +424,17 @@ class RebaseTodoWidget(Widget):
             with Horizontal():
                 yield CommitGrid(
                     rebase_items,
-                    self._active_index if self._state != "moving" else None,
-                    self._selected,
+                    self._todo_state.cursor if self._state != "moving" else None,
+                    self._todo_state.get_selected(),
                     id="commit_grid",
                 )
 
                 if self._show_files:
                     yield FileGrid(
                         rebase_items,
-                        self._active_index if self._state != "moving" else None,
+                        self._todo_state.cursor if self._state != "moving" else None,
                         self._active_file_index,
-                        self._selected,
+                        self._todo_state.get_selected(),
                         self._visible_files,
                         id="file_grid",
                     )
