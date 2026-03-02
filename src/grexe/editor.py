@@ -5,6 +5,7 @@ from git import Repo
 from textual.app import App
 
 from grexe.main_screen import MainScreen
+from grexe.rebase_todo_state import RebaseTodoState
 from grexe.rebasing import parse_rebase_items, create_rebase_todo_text
 from grexe.types import RebaseItem
 
@@ -19,7 +20,7 @@ class GitRebaseExtendedEditor(App):
     def __init__(self, rebase_items: List[RebaseItem], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._main_screen: Optional[MainScreen] = None
-        self._rebase_items = rebase_items
+        self._rebase_todo_state = RebaseTodoState(rebase_items)
         self._result: Optional[str] = None
 
     def action_quit(self) -> None:
@@ -30,12 +31,12 @@ class GitRebaseExtendedEditor(App):
         return self._result
 
     def action_submit(self):
-        rebase_items = self._main_screen.get_rebase_items()
+        rebase_items = self._rebase_todo_state.get_current_items()
         self._result = create_rebase_todo_text(rebase_items)
         self.exit()
 
     def on_mount(self):
-        self._main_screen = MainScreen(self._rebase_items)
+        self._main_screen = MainScreen(self._rebase_todo_state)
         self.push_screen(self._main_screen)
 
 
