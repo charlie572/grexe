@@ -55,6 +55,22 @@ class RebaseTodoStateAndCursor:
         """Get the rebase item currently under the cursor"""
         return deepcopy(self._state.get_current_items()[self._cursor])
 
+    def get_indices_to_modify(self) -> List[int]:
+        """Get the indices of the rebase items to modify
+
+        This can be used when moving multiple items, or changing the rebase action of
+        multiple items.
+
+        If some items are selected, this function will return their indices. If no items
+        are selected, the active item will be returned (the one currently under the
+        cursor).
+        """
+        selected_indices = self.get_selected_indices()
+        if len(selected_indices) == 0:
+            return [self._cursor]
+        else:
+            return selected_indices
+
     def set_cursor(self, new_cursor):
         self._cursor = new_cursor
         self._on_change_active_item(self._cursor, self.get_active_item())
