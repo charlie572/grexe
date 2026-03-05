@@ -59,17 +59,17 @@ class RebaseTodoWidget(Widget):
         if event.key == "v":
             self.action_select()
         if event.key == "p":
-            self.action_pick()
+            self._set_rebase_action("pick")
         if event.key == "f":
-            self.action_fixup()
+            self._set_rebase_action("fixup")
         if event.key == "s":
-            self.action_squash()
+            self._set_rebase_action("squash")
         if event.key == "e":
-            self.action_edit()
+            self._set_rebase_action("edit")
         if event.key == "r":
-            self.action_reword()
+            self._set_rebase_action("reword")
         if event.key == "d":
-            self.action_drop()
+            self._set_rebase_action("drop")
         if event.key == "m":
             self.action_move_commits()
         if event.key == "c":
@@ -371,24 +371,6 @@ class RebaseTodoWidget(Widget):
 
         self._todo_state.modify_items(rebase_items)
         self.refresh(recompose=True)
-
-    def action_edit(self):
-        self._set_rebase_action("edit")
-
-    def action_pick(self):
-        self._set_rebase_action("pick")
-
-    def action_fixup(self):
-        self._set_rebase_action("fixup")
-
-    def action_squash(self):
-        self._set_rebase_action("squash")
-
-    def action_drop(self):
-        self._set_rebase_action("drop")
-
-    def action_reword(self):
-        self._set_rebase_action("reword")
 
     def set_visible_files(self, visible_files):
         self._visible_files = visible_files
