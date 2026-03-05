@@ -48,6 +48,18 @@ class RebaseTodoWidget(Widget):
         pass
 
     def on_key(self, event: Key):
+        if self._state != "idle":
+            # These are the only actions that can be performed in a non-idle state.
+            if event.key == "j":
+                self.action_move_down()
+            if event.key == "k":
+                self.action_move_up()
+            if event.key == "m":
+                self.action_move_commits()
+            if event.key == "q":
+                self.action_distribute()
+            return
+
         if event.key == "j":
             self.action_move_down()
         if event.key == "k":
@@ -354,16 +366,10 @@ class RebaseTodoWidget(Widget):
         self.refresh(recompose=True)
 
     def action_select_all(self):
-        if self._state != "idle":
-            return
-
         self._todo_state.toggle_select_all_or_none()
         self.refresh(recompose=True)
 
     def _set_rebase_action(self, action: RebaseAction):
-        if self._state != "idle":
-            return
-
         rebase_items = deepcopy(self._todo_state.get_current_items())
 
         for item in self._get_items_to_modify(rebase_items):
