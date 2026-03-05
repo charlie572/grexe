@@ -57,7 +57,6 @@ class RebaseTodoStateAndCursor:
 
     def set_cursor(self, new_cursor):
         self._cursor = new_cursor
-        rebase_items = self._state.get_current_items()
         self._on_change_active_item(self._cursor, self.get_active_item())
 
     def _clamp_cursor(self):
