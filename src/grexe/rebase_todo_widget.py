@@ -8,6 +8,7 @@ from textual.widget import Widget
 from textual.widgets import Label
 
 from grexe.distribute import distribute_changes
+from grexe.rebase_todo_interactions import RebaseItemMover
 from grexe.types import RebaseItem, RebaseAction
 from grexe.rebase_todo_state import RebaseTodoState, RebaseTodoStateAndCursor
 from grexe.widgets import FilenameLabel, FileChangeIndicator
@@ -30,6 +31,9 @@ class RebaseTodoWidget(Widget):
             rebase_todo_state,
             self._on_changed_active_item,
         )
+
+        # Classes providing stateful user interactions
+        self._item_mover = RebaseItemMover(self._todo_state)
 
         self._active_file_index = -1
         self._distribute_sources: Optional[List[int]] = None
@@ -288,52 +292,18 @@ class RebaseTodoWidget(Widget):
 
     def action_move_commits(self):
         if self._state == "idle":
-            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
-
-            # remove selected widgets
             indices_to_move = self._get_indices_to_modify()
-            items_to_move = [rebase_items.pop(i) for i in reversed(indices_to_move)]
-
-            # insert widgets back again as one block, with the bottom commit at its original index
-            dest_index = indices_to_move[-1] - len(indices_to_move) + 1
-            for item in items_to_move:
-                rebase_items.insert(dest_index, item)
-
-            selected = [False] * self._todo_state.get_current_num_items()
-            for i in range(dest_index, dest_index + len(items_to_move)):
-                selected[i] = True
-            self._todo_state.set_selected(selected)
-
+            self._item_mover.start_moving(indices_to_move)
             self._state = "moving"
-
-            self._todo_state.modify_items(tuple(rebase_items))
             self.refresh(recompose=True)
         elif self._state == "moving":
-            selected_indices = self._get_selected(indices=True)
-
-            self._todo_state.set_cursor(selected_indices[0])
-            self._todo_state.select_none()
-
+            self._item_mover.stop_moving()
             self._state = "idle"
-
             self.refresh(recompose=True)
 
     def action_move_up(self):
         if self._state == "moving":
-            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
-            selected_indices = self._todo_state.get_selected_indices()
-            if selected_indices[0] == 0:
-                return
-
-            item_before_selected = rebase_items.pop(selected_indices[0] - 1)
-            rebase_items.insert(selected_indices[-1], item_before_selected)
-            self._todo_state.modify_items(tuple(rebase_items))
-
-            selected = [False] * self._todo_state.get_current_num_items()
-            for i in selected_indices:
-                selected[i - 1] = True
-            self._todo_state.set_selected(selected)
-
+            self._item_mover.move_up()
             self.refresh(recompose=True)
         else:
             self._todo_state.move_cursor("dec")
@@ -341,21 +311,7 @@ class RebaseTodoWidget(Widget):
 
     def action_move_down(self):
         if self._state == "moving":
-            rebase_items = list(deepcopy(self._todo_state.get_current_items()))
-
-            selected_indices = self._get_selected(indices=True)
-            if selected_indices[-1] == len(rebase_items) - 1:
-                return
-
-            item_after_selected = rebase_items.pop(selected_indices[-1] + 1)
-            rebase_items.insert(selected_indices[0], item_after_selected)
-            self._todo_state.modify_items(tuple(rebase_items))
-
-            selected = [False] * self._todo_state.get_current_num_items()
-            for i in selected_indices:
-                selected[i + 1] = True
-            self._todo_state.set_selected(selected)
-
+            self._item_mover.move_down()
             self.refresh(recompose=True)
         else:
             self._todo_state.move_cursor("inc")
@@ -389,6 +345,11 @@ class RebaseTodoWidget(Widget):
         # right half shows the file changes. The right half is scrollable horizontally. Both halves
         # are grid layouts.
 
+        if self._state == "moving":
+            highlighted_indices = self._item_mover.get_moving_indices()
+        else:
+            highlighted_indices = self._todo_state.get_selected_indices()
+
         with Vertical():
             status_text = (
                 "Select commits to distribute into..."
@@ -401,7 +362,7 @@ class RebaseTodoWidget(Widget):
                 yield CommitGrid(
                     rebase_items,
                     self._todo_state.cursor if self._state != "moving" else None,
-                    self._todo_state.get_selected(),
+                    highlighted_indices,
                     id="commit_grid",
                 )
 
@@ -409,7 +370,7 @@ class RebaseTodoWidget(Widget):
                     rebase_items,
                     self._todo_state.cursor if self._state != "moving" else None,
                     self._active_file_index,
-                    self._todo_state.get_selected(),
+                    highlighted_indices,
                     self._visible_files,
                     id="file_grid",
                 )
@@ -420,7 +381,7 @@ class CommitGrid(Grid):
         self,
         rebase_items: Tuple[RebaseItem, ...],
         active_index: Optional[int],
-        selected: List[bool],
+        highlighted_indices: List[int],
         *args,
         **kwargs,
     ):
@@ -428,7 +389,7 @@ class CommitGrid(Grid):
 
         self._rebase_items = rebase_items
         self._active_index = active_index
-        self._selected = selected
+        self._highlighted_indices = highlighted_indices
 
         self.styles.grid_columns = "auto"
         self.styles.grid_gutter_vertical = 2
@@ -443,12 +404,17 @@ class CommitGrid(Grid):
         yield Label("")
         yield Label("")
 
+        # make boolean array from self._highlighted_indices
+        highlighted = [False] * len(self._rebase_items)
+        for i in self._highlighted_indices:
+            highlighted[i] = True
+
         # commit rows
         for i, item in enumerate(self._rebase_items):
             classes = []
             if i == self._active_index:
                 classes.append("active")
-            if self._selected[i]:
+            if highlighted[i]:
                 classes.append("selected")
             classes = " ".join(classes)
 
@@ -466,7 +432,7 @@ class FileGrid(Grid):
         rebase_items: Tuple[RebaseItem, ...],
         active_index: Optional[int],
         active_file_index: int,
-        selected: List[bool],
+        highlighted_indices: List[int],
         visible_files: List[str | os.PathLike[str]],
         *args,
         **kwargs,
@@ -475,7 +441,7 @@ class FileGrid(Grid):
 
         self._rebase_items = rebase_items
         self._active_index = active_index
-        self._selected = selected
+        self._highlighted_indices = highlighted_indices
         self._visible_files = visible_files
         self._active_file_index = active_file_index
 
@@ -493,12 +459,17 @@ class FileGrid(Grid):
         for file in self._visible_files:
             yield FilenameLabel(file, classes="filename")
 
+        # make boolean array from self._highlighted_indices
+        highlighted = [False] * len(self._rebase_items)
+        for i in self._highlighted_indices:
+            highlighted[i] = True
+
         # commit rows
         for i, item in enumerate(self._rebase_items):
             classes = []
             if i == self._active_index:
                 classes.append("active")
-            if self._selected[i]:
+            if highlighted[i]:
                 classes.append("selected")
             classes = " ".join(classes)
 
