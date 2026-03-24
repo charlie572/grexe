@@ -4,6 +4,7 @@ from typing import List, Tuple, Literal, Optional
 
 from textual.containers import Horizontal, Grid, Vertical
 from textual.events import Click, Key
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Label
 
@@ -137,6 +138,11 @@ class RebaseTodoWidget(Widget):
         else:
             self._last_hovered_file = None
 
+    def on_commit_grid_clicked_commit(self, event):
+        self._todo_state.set_cursor(event.commit_index)
+        self._todo_state.select_single(event.commit_index)
+        self.refresh(recompose=True)
+
     def on_click(self, event: Click):
         # check if a file was clicked
         file_grid = self.query_one("#file_grid")
@@ -165,20 +171,6 @@ class RebaseTodoWidget(Widget):
             self._todo_state.modify_items(rebase_items)
 
             # select commit
-            self._todo_state.set_cursor(commit_index)
-            self._todo_state.select_single(commit_index)
-
-            self.refresh(recompose=True)
-            return
-
-        # check if a commit was clicked
-        commit_grid = self.query_one("#commit_grid")
-        for child_index, child in enumerate(commit_grid.children):
-            if child is not event.widget:
-                continue
-
-            # Commit was clicked. Select it.
-            commit_index = child_index // 3 - 1
             self._todo_state.set_cursor(commit_index)
             self._todo_state.select_single(commit_index)
 
@@ -320,6 +312,11 @@ class RebaseTodoWidget(Widget):
 
 
 class CommitGrid(Grid):
+    class ClickedCommit(Message):
+        def __init__(self, commit_index):
+            self.commit_index = commit_index
+            super().__init__()
+
     def __init__(
         self,
         rebase_items: Tuple[RebaseItem, ...],
@@ -340,6 +337,16 @@ class CommitGrid(Grid):
         self.styles.grid_size_rows = len(rebase_items) + 1
         self.styles.grid_size_columns = 3
         self.styles.height = len(rebase_items) + 1
+
+    def on_click(self, event: Click):
+        for child_index, child in enumerate(self.children):
+            if child is not event.widget:
+                continue
+
+            commit_index = child_index // 3 - 1
+            self.post_message(self.ClickedCommit(commit_index))
+
+            return
 
     def compose(self):
         # header row
