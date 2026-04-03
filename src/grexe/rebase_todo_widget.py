@@ -9,9 +9,21 @@ from textual.widget import Widget
 from textual.widgets import Label
 
 from grexe.rebase_todo_interactions import RebaseItemMover, RebaseItemDistributor
-from grexe.types import RebaseItem, RebaseAction
+from grexe.types import RebaseItem, RebaseAction, FileChange
 from grexe.rebase_todo_state import RebaseTodoState, RebaseTodoStateAndCursor
 from grexe.widgets import FilenameLabel, FileChangeIndicator
+
+
+def get_files_modified(
+    rebase_items: Tuple[RebaseItem, ...], include_files_excluded_by_user: bool = False
+):
+    file_changes: List[FileChange] = sum(
+        [list(item.file_changes.values()) for item in rebase_items], start=[]
+    )
+    if not include_files_excluded_by_user:
+        file_changes = [change for change in file_changes if change.included]
+    files = [change.path for change in file_changes]
+    return list(set(files))
 
 
 class RebaseTodoWidget(Widget):
@@ -35,18 +47,16 @@ class RebaseTodoWidget(Widget):
 
         self._state: Literal["idle", "moving", "distributing"] = "idle"
 
-        rebase_items = rebase_todo_state.get_original_items()
-        self._visible_files: List[str | os.PathLike[str]] = sum(
-            [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
-        )
-        self._visible_files = list(set(self._visible_files))
-
         self._last_hovered_file = None
 
         # children
         self._status_label: Optional[Label] = None
         self._commit_grid: Optional[CommitGrid] = None
         self._file_grid: Optional[FileGrid] = None
+
+    @property
+    def file_grid(self):
+        return self._file_grid
 
     def on_key(self, event: Key):
         if self._state != "idle":
@@ -204,10 +214,6 @@ class RebaseTodoWidget(Widget):
         self._todo_state.modify_items(rebase_items)
         self._update()
 
-    def set_visible_files(self, visible_files):
-        self._visible_files = visible_files
-        self._update()
-
     def _update(self):
         """Update the state of all the children, and refresh them"""
 
@@ -235,7 +241,6 @@ class RebaseTodoWidget(Widget):
             rebase_items,
             self._todo_state.cursor if self._state != "moving" else None,
             highlighted_indices,
-            self._visible_files,
         )
 
         self._commit_grid.refresh(recompose=True)
@@ -247,9 +252,13 @@ class RebaseTodoWidget(Widget):
         # are grid layouts.
 
         # Instantiate the children as empty widgets, then populate them with state
+
         self._status_label = Label()
         self._commit_grid = CommitGrid()
-        self._file_grid = FileGrid()
+
+        files = get_files_modified(self._todo_state.get_original_items())
+        self._file_grid = FileGrid(files)
+
         self._update()
 
         with Vertical():
@@ -291,6 +300,7 @@ class CommitGrid(Grid):
         rebase_items: Tuple[RebaseItem, ...],
         active_index: Optional[int],
         highlighted_indices: List[int],
+        recompose: bool = False,
     ):
         """Set all of the state
 
@@ -302,6 +312,9 @@ class CommitGrid(Grid):
 
         self.styles.grid_size_rows = len(rebase_items) + 1
         self.styles.height = len(rebase_items) + 1
+
+        if recompose:
+            self.refresh(recompose=True)
 
     def on_click(self, event: Click):
         for child_index, child in enumerate(self.children):
@@ -352,33 +365,40 @@ class FileGrid(Grid):
     - a cross if it is included, but the user has clicked on it to remove it
     - nothing otherwise
 
-    The constructor has no parameters. You must instantiate it as an empty widget,
-    then populate the state using the update_state() method.
+    Only the list of files is initialised in the constructor, so the widget
+    is empty when it is instantiated. You must populate the other state with the
+    update_state() method.
+
+    :param files: The list of file paths to use as the column headers. The columns
+                  can be shown or hidden later using set_visible_files().
     """
 
     class SetFileStatus(Message):
-        def __init__(self, commit_index, file_index, file_path, included):
+        def __init__(self, commit_index, file_path, included):
             self.commit_index = commit_index
-            self.file_index = file_index
             self.file_path = file_path
             self.included = included
             super().__init__()
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        files: List[str | os.PathLike[str]],
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         self._rebase_items: Tuple[RebaseItem, ...] = ()
         self._active_index: Optional[int] = None
         self._highlighted_indices: List[int] = []
-        self._visible_files: List[str | os.PathLike[str]] = []
+        self._visible_files: List[str | os.PathLike[str]] = files
         self._active_file_index: int = -1
 
         self.styles.grid_columns = "auto"
         self.styles.grid_gutter_vertical = 1
         self.styles.grid_rows = "1"
         self.styles.grid_size_rows = 1
-        self.styles.grid_size_columns = 0
-        # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
+        self.styles.grid_size_columns = len(self._visible_files)
         self.styles.height = 2
         self.styles.overflow_x = "auto"
 
@@ -387,7 +407,7 @@ class FileGrid(Grid):
         rebase_items: Tuple[RebaseItem, ...],
         active_index: Optional[int],
         highlighted_indices: List[int],
-        visible_files: List[str | os.PathLike[str]],
+        recompose: bool = False,
     ):
         """Set all of the state
 
@@ -396,12 +416,25 @@ class FileGrid(Grid):
         self._rebase_items = rebase_items
         self._active_index = active_index
         self._highlighted_indices = highlighted_indices
-        self._visible_files = visible_files
 
         self.styles.grid_size_rows = len(rebase_items) + 1
-        self.styles.grid_size_columns = len(visible_files)
         # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
         self.styles.height = len(rebase_items) + 2
+
+        if recompose:
+            self.refresh(recompose=True)
+
+    def set_visible_files(
+        self,
+        visible_files: List[str | os.PathLike[str]],
+        recompose: bool = False,
+    ):
+        """Only these files will be shown"""
+        self._visible_files = visible_files
+        self.styles.grid_size_columns = len(self._visible_files)
+
+        if recompose:
+            self.refresh(recompose=True)
 
     def action_move_left(self):
         """Highlight the file one space to the left"""
@@ -473,9 +506,7 @@ class FileGrid(Grid):
 
         # notify other widgets
         self.post_message(
-            self.SetFileStatus(
-                commit_index, file_index, file_change.path, new_included_state
-            )
+            self.SetFileStatus(commit_index, file_change.path, new_included_state)
         )
 
     def compose(self):

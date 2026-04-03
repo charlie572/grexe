@@ -34,7 +34,9 @@ class MainScreen(Screen):
         self._file_selector.styles.width = "50%"
 
     def on_file_selector_changed_active_files(self, event):
-        self._rebase_todo_widget.set_visible_files(event.active_files)
+        self._rebase_todo_widget.file_grid.set_visible_files(
+            event.active_files, recompose=True
+        )
 
     def compose(self):
         with Horizontal():

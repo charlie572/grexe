@@ -20,6 +20,18 @@ class RebaseTodoState:
     def get_original_items(self):
         return self._history[0]
 
+    def get_original_files(self, include_files_excluded_by_user: bool = True):
+        """Get a list of all the files modified across all the commits in the original state
+
+        Some commits might have been dropped or modified. This function returns all the
+        files from before any of these modifications.
+        """
+        rebase_items = self.get_original_items()
+        self._visible_files: List[str | os.PathLike[str]] = sum(
+            [list(item.commit.stats.files.keys()) for item in rebase_items], start=[]
+        )
+        self._visible_files = list(set(self._visible_files))
+
     def modify_items(self, rebase_items: Tuple[RebaseItem, ...]):
         """Modify the rebase_items, while tracking the changes so this action can be undone"""
         self._history = self._history[: self._history_index + 1] + [rebase_items]
