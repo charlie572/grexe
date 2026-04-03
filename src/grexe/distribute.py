@@ -4,9 +4,9 @@ from typing import List, Tuple
 from grexe.types import RebaseItem
 
 
-def get_modified_file_paths(rebase_item: RebaseItem):
+def get_included_file_paths(rebase_item: RebaseItem):
     return [
-        path for path, change in rebase_item.file_changes.items() if change.modified
+        path for path, change in rebase_item.file_changes.items() if change.included
     ]
 
 
@@ -29,13 +29,13 @@ def distribute_changes(
     # Check for any file changes with ambiguous target commits.
     all_source_files = set(
         sum(
-            [get_modified_file_paths(rebase_items[i]) for i in source_indices], start=[]
+            [get_included_file_paths(rebase_items[i]) for i in source_indices], start=[]
         )
     )
     target_files_seen = set()
     ambiguous_files = set()
     for target_index in target_indices:
-        target_files = get_modified_file_paths(rebase_items[target_index])
+        target_files = get_included_file_paths(rebase_items[target_index])
         common_files = all_source_files.intersection(target_files)
         ambiguous_files.update(target_files_seen.intersection(common_files))
         target_files_seen.update(common_files)
@@ -74,7 +74,7 @@ def distribute_changes(
             result.append(deepcopy(rebase_items[i]))
             i += 1
 
-        target_file_paths = set(get_modified_file_paths(target_item))
+        target_file_paths = set(get_included_file_paths(target_item))
 
         # Squash source file changes into this target commit (after the items we just skipped over).
         for source_index in source_indices:
@@ -83,7 +83,7 @@ def distribute_changes(
 
             # get file changes to squash
             source_item = rebase_items[source_index]
-            source_file_paths = set(get_modified_file_paths(source_item))
+            source_file_paths = set(get_included_file_paths(source_item))
             paths_to_squash = target_file_paths.intersection(source_file_paths)
             if len(paths_to_squash) == 0:
                 continue
@@ -92,7 +92,7 @@ def distribute_changes(
             fixup: RebaseItem = deepcopy(source_item)
             fixup.action = "squash"
             for file_path, file_change in fixup.file_changes.items():
-                file_change.modified = file_path in paths_to_squash
+                file_change.included = file_path in paths_to_squash
             result.append(fixup)
 
     return tuple(result), None

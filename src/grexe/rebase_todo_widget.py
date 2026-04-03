@@ -149,7 +149,7 @@ class RebaseTodoWidget(Widget):
         # toggle file
         rebase_items = deepcopy(self._todo_state.get_current_items())
         file_change = rebase_items[event.commit_index].file_changes[event.file_path]
-        file_change.modified = not file_change.modified
+        file_change.included = not file_change.included
         self._todo_state.modify_items(rebase_items)
 
         # select commit
@@ -171,7 +171,7 @@ class RebaseTodoWidget(Widget):
 
         # set file change status
         file_change = rebase_item.file_changes[event.file_path]
-        file_change.modified = event.included
+        file_change.included = event.included
 
         # select modified commit
         self._todo_state.set_cursor(event.commit_index)
@@ -488,7 +488,7 @@ class FileGrid(Grid):
         if file_change is None:
             return
 
-        new_included_state = not file_change.modified
+        new_included_state = not file_change.included
 
         # notify other widgets
         self.post_message(
@@ -520,7 +520,7 @@ class FileGrid(Grid):
                 file_change = item.file_changes.get(file)
                 if file_change:
                     selectable = True
-                    changed = file_change.modified
+                    changed = file_change.included
                 else:
                     selectable = False
                     changed = False

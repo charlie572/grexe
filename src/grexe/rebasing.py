@@ -19,7 +19,7 @@ def check_rebase_is_valid(rebase_items: List[RebaseItem]) -> List[str]:
         files_seen = set()
         for item in items_for_commit:
             for file_path, file_change in item.file_changes.items():
-                if not file_change.modified:
+                if not file_change.included:
                     continue
                 elif file_path in files_seen:
                     errors.append(
@@ -49,10 +49,10 @@ def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
         first_message_line = item.commit.message.split("\n")[0]
 
         all_files_included = all(
-            change.modified for change in item.file_changes.values()
+            change.included for change in item.file_changes.values()
         )
         no_files_included = all(
-            not change.modified for change in item.file_changes.values()
+            not change.included for change in item.file_changes.values()
         )
 
         if item.action == "drop" or all_files_included:
@@ -71,7 +71,7 @@ def create_rebase_todo_text(rebase_items: List[RebaseItem]) -> str:
             rebase_todo_text += f"pick {item.commit.hexsha[:7]} {first_message_line}\n"
 
             changed_files = " ".join(
-                change.path for change in item.file_changes.values() if change.modified
+                change.path for change in item.file_changes.values() if change.included
             )
             rebase_todo_text += (
                 f"exec grexe-edit-rebase-item -a {item.action} {changed_files}\n"
