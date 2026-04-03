@@ -39,13 +39,13 @@ class RebaseTodoWidget(Widget):
 
         self.can_focus = True
 
+        # state
         self._todo_state = RebaseTodoStateAndCursor(rebase_todo_state)
+        self._state: Literal["idle", "moving", "distributing"] = "idle"
 
-        # Classes providing stateful user interactions
+        # classes providing stateful user interactions
         self._item_mover = RebaseItemMover(self._todo_state)
         self._item_distributor = RebaseItemDistributor(self._todo_state)
-
-        self._state: Literal["idle", "moving", "distributing"] = "idle"
 
         # children
         self._status_label: Optional[Label] = None
@@ -110,6 +110,27 @@ class RebaseTodoWidget(Widget):
         if event.key == "q":
             self.action_distribute()
 
+    def on_commit_grid_clicked_commit(self, event):
+        self._todo_state.set_cursor(event.commit_index)
+        self._todo_state.select_single(event.commit_index)
+        self._update()
+
+    def on_file_grid_set_file_status(self, event):
+        # find rebase item to modify
+        rebase_items = list(deepcopy(self._todo_state.get_current_items()))
+        rebase_item: RebaseItem = rebase_items[event.commit_index]
+
+        # set file change status
+        file_change = rebase_item.file_changes[event.file_path]
+        file_change.included = event.included
+
+        # select modified commit
+        self._todo_state.set_cursor(event.commit_index)
+
+        # modify item and update
+        self._todo_state.modify_items(tuple(rebase_items))
+        self._update()
+
     def action_distribute(self):
         if self._state == "idle":
             picked_valid_sources = self._item_distributor.pick_sources()
@@ -128,31 +149,10 @@ class RebaseTodoWidget(Widget):
             self._state = "idle"
             self._update()
 
-    def on_commit_grid_clicked_commit(self, event):
-        self._todo_state.set_cursor(event.commit_index)
-        self._todo_state.select_single(event.commit_index)
-        self._update()
-
     def action_copy(self):
         self._todo_state.insert_item(
             self._todo_state.get_active_item(), self._todo_state.cursor
         )
-        self._update()
-
-    def on_file_grid_set_file_status(self, event):
-        # find rebase item to modify
-        rebase_items = list(deepcopy(self._todo_state.get_current_items()))
-        rebase_item: RebaseItem = rebase_items[event.commit_index]
-
-        # set file change status
-        file_change = rebase_item.file_changes[event.file_path]
-        file_change.included = event.included
-
-        # select modified commit
-        self._todo_state.set_cursor(event.commit_index)
-
-        # modify item and update
-        self._todo_state.modify_items(tuple(rebase_items))
         self._update()
 
     def action_move_commits(self):
