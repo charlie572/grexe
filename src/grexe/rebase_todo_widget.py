@@ -36,8 +36,6 @@ class RebaseTodoWidget(Widget):
         self._item_mover = RebaseItemMover(self._todo_state)
         self._item_distributor = RebaseItemDistributor(self._todo_state)
 
-        self._active_file_index = -1
-
         self._state: Literal["idle", "moving", "distributing"] = "idle"
 
         rebase_items = rebase_todo_state.get_original_items()
@@ -76,9 +74,9 @@ class RebaseTodoWidget(Widget):
         if event.key == "k":
             self.action_move_up()
         if event.key == "h":
-            self.action_move_left()
+            self._file_grid.action_move_left()
         if event.key == "l":
-            self.action_move_right()
+            self._file_grid.action_move_right()
         if event.key == "v":
             self.action_select()
         if event.key == "p":
@@ -98,7 +96,7 @@ class RebaseTodoWidget(Widget):
         if event.key == "c":
             self.action_copy()
         if event.key == "t":
-            self.action_toggle_file()
+            self._file_grid.action_toggle_file()
         if event.key == "ctrl+a":
             self.action_select_all()
         if event.key == "ctrl+z":
@@ -148,9 +146,6 @@ class RebaseTodoWidget(Widget):
         self._update()
 
     def on_file_grid_clicked_file(self, event):
-        # select file
-        self._active_file_index = event.file_index
-
         # toggle file
         rebase_items = deepcopy(self._todo_state.get_current_items())
         file_change = rebase_items[event.commit_index].file_changes[event.file_path]
@@ -169,48 +164,21 @@ class RebaseTodoWidget(Widget):
         )
         self._update()
 
-    def action_toggle_file(self):
+    def on_file_grid_set_file_status(self, event):
+        # find rebase item to modify
         rebase_items = list(deepcopy(self._todo_state.get_current_items()))
-        active_item: RebaseItem = rebase_items[self._todo_state.cursor]
+        rebase_item: RebaseItem = rebase_items[event.commit_index]
 
-        file = self._visible_files[self._active_file_index]
-        file_change = active_item.file_changes[file]
-        file_change.modified = not file_change.modified
+        # set file change status
+        file_change = rebase_item.file_changes[event.file_path]
+        file_change.modified = event.included
 
+        # select modified commit
+        self._todo_state.set_cursor(event.commit_index)
+
+        # modify item and update
         self._todo_state.modify_items(tuple(rebase_items))
         self._update()
-
-    def action_move_left(self):
-        active_item = self._todo_state.get_current_items()[self._todo_state.cursor]
-        if not isinstance(active_item, RebaseItem):
-            return
-
-        # move left to next file indicator, or select no files (self._active_file_index == -1)
-        while self._active_file_index > -1:
-            self._active_file_index -= 1
-            file = self._visible_files[self._active_file_index]
-            if file in active_item.file_changes:
-                break
-
-        self._update()
-
-    def action_move_right(self):
-        active_item = self._todo_state.get_current_items()[self._todo_state.cursor]
-        if not isinstance(active_item, RebaseItem):
-            return
-
-        previous_active_file_index = self._active_file_index
-
-        # move right to next file indicator
-        while self._active_file_index < len(self._visible_files) - 1:
-            self._active_file_index += 1
-            file = self._visible_files[self._active_file_index]
-            if file in active_item.file_changes:
-                self._update()
-                return
-
-        # No more files. Reset index to what it was before this function was run.
-        self._active_file_index = previous_active_file_index
 
     def action_move_commits(self):
         if self._state == "idle":
@@ -285,7 +253,6 @@ class RebaseTodoWidget(Widget):
         self._file_grid.update_state(
             rebase_items,
             self._todo_state.cursor if self._state != "moving" else None,
-            self._active_file_index,
             highlighted_indices,
             self._visible_files,
         )
@@ -408,11 +375,12 @@ class FileGrid(Grid):
     then populate the state using the update_state() method.
     """
 
-    class ClickedFile(Message):
-        def __init__(self, commit_index, file_index, file_path):
+    class SetFileStatus(Message):
+        def __init__(self, commit_index, file_index, file_path, included):
             self.commit_index = commit_index
             self.file_index = file_index
             self.file_path = file_path
+            self.included = included
             super().__init__()
 
     def __init__(self, *args, **kwargs):
@@ -437,7 +405,6 @@ class FileGrid(Grid):
         self,
         rebase_items: Tuple[RebaseItem, ...],
         active_index: Optional[int],
-        active_file_index: int,
         highlighted_indices: List[int],
         visible_files: List[str | os.PathLike[str]],
     ):
@@ -449,35 +416,86 @@ class FileGrid(Grid):
         self._active_index = active_index
         self._highlighted_indices = highlighted_indices
         self._visible_files = visible_files
-        self._active_file_index = active_file_index
 
         self.styles.grid_size_rows = len(rebase_items) + 1
         self.styles.grid_size_columns = len(visible_files)
         # An extra row is added at the bottom so the scroll bar doesn't cover the bottom row.
         self.styles.height = len(rebase_items) + 2
 
+    def action_move_left(self):
+        """Highlight the file one space to the left"""
+        active_item = self._rebase_items[self._active_index]
+
+        # move left to next file indicator, or select no files (self._active_file_index == -1)
+        while self._active_file_index > -1:
+            self._active_file_index -= 1
+            file = self._visible_files[self._active_file_index]
+            if file in active_item.file_changes:
+                break
+
+        self.refresh(recompose=True)
+
+    def action_move_right(self):
+        """Highlight the file one space to the right"""
+        active_item = self._rebase_items[self._active_index]
+
+        previous_active_file_index = self._active_file_index
+
+        # move right to next file indicator
+        while self._active_file_index < len(self._visible_files) - 1:
+            self._active_file_index += 1
+            file = self._visible_files[self._active_file_index]
+            if file in active_item.file_changes:
+                self.refresh(recompose=True)
+                return
+
+        # No more files. Reset index to what it was before this function was run.
+        self._active_file_index = previous_active_file_index
+
     def on_click(self, event: Click) -> None:
+        # find clicked child index
+        clicked_child_index: Optional[int] = None
         for child_index, child in enumerate(self.children):
-            if child is not event.widget:
-                continue
-
-            # This widget was clicked
-
-            # get commit index (row) and file index (column)
-            commit_index = child_index // len(self._visible_files) - 1
-            file_index = child_index % len(self._visible_files)
-
-            # Check if there is a file change in the clicked region, or just a blank space.
-            file = self._visible_files[file_index]
-            file_change = self._rebase_items[commit_index].file_changes.get(file)
-
-            # Post message if a file change indicator was clicked.
-            if file_change is not None:
-                self.post_message(
-                    self.ClickedFile(commit_index, file_index, file_change.path)
-                )
-
+            if child is event.widget:
+                clicked_child_index = child_index
+                break
+        if clicked_child_index is None:
             return
+
+        # get commit index (row) and file index (column) that was clicked
+        commit_index = clicked_child_index // len(self._visible_files) - 1
+        file_index = clicked_child_index % len(self._visible_files)
+
+        self._toggle_file(commit_index, file_index)
+
+        # select file (if there is a file at the clicked location)
+        self._active_file_index = file_index
+        self._toggle_file(commit_index, file_index)
+
+    def action_toggle_file(self):
+        """Toggle the status of the selected file indicator"""
+        self._toggle_file(self._active_index, self._active_file_index)
+
+    def _toggle_file(self, commit_index: int, file_index: int):
+        """Toggle the file indicator at these coordinates
+
+        If there is no indicator at this location, just a blank space, then nothing will
+        happen.
+        """
+        # Check if there is a file change in the clicked region, or just a blank space.
+        file = self._visible_files[file_index]
+        file_change = self._rebase_items[commit_index].file_changes.get(file)
+        if file_change is None:
+            return
+
+        new_included_state = not file_change.modified
+
+        # notify other widgets
+        self.post_message(
+            self.SetFileStatus(
+                commit_index, file_index, file_change.path, new_included_state
+            )
+        )
 
     def compose(self):
         # header row
