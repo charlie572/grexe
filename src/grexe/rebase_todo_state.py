@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import List, Tuple, Callable, Literal, Optional
+from typing import List, Tuple, Literal, Optional
 
 from grexe.types import RebaseItem
 
@@ -40,12 +40,10 @@ class RebaseTodoStateAndCursor:
     def __init__(
         self,
         rebase_todo_state: RebaseTodoState,
-        on_change_active_item: Callable[[int, RebaseItem], None],
     ):
         self._state = rebase_todo_state
         self._selected = [False] * self._state.get_current_num_items()
         self._cursor = 0
-        self._on_change_active_item = on_change_active_item
 
     @property
     def cursor(self):
@@ -73,7 +71,6 @@ class RebaseTodoStateAndCursor:
 
     def set_cursor(self, new_cursor):
         self._cursor = new_cursor
-        self._on_change_active_item(self._cursor, self.get_active_item())
 
     def _clamp_cursor(self):
         num_items = self.get_current_num_items()
@@ -153,7 +150,6 @@ class RebaseTodoStateAndCursor:
 
         self._state.modify_items(rebase_items)
         self._clamp_cursor()
-        self._on_change_active_item(self._cursor, self.get_active_item())
 
     def insert_item(self, rebase_item: RebaseItem, index: Optional[int] = None):
         if index is None:
@@ -170,13 +166,11 @@ class RebaseTodoStateAndCursor:
         self._state.undo()
         self.select_none()
         self._clamp_cursor()
-        self._on_change_active_item(self._cursor, self.get_active_item())
 
     def redo(self):
         self._state.redo()
         self.select_none()
         self._clamp_cursor()
-        self._on_change_active_item(self._cursor, self.get_active_item())
 
     def move_cursor(self, direction: Literal["inc", "dec"]):
         """Increment or decrement cursor, and clamp to valid bounds"""

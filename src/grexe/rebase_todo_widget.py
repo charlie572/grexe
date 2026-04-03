@@ -27,10 +27,7 @@ class RebaseTodoWidget(Widget):
 
         self.can_focus = True
 
-        self._todo_state = RebaseTodoStateAndCursor(
-            rebase_todo_state,
-            self._on_changed_active_item,
-        )
+        self._todo_state = RebaseTodoStateAndCursor(rebase_todo_state)
 
         # Classes providing stateful user interactions
         self._item_mover = RebaseItemMover(self._todo_state)
@@ -50,9 +47,6 @@ class RebaseTodoWidget(Widget):
         self._status_label: Optional[Label] = None
         self._commit_grid: Optional[CommitGrid] = None
         self._file_grid: Optional[FileGrid] = None
-
-    def _on_changed_active_item(self, cursor: int, active_item: RebaseItem):
-        pass
 
     def on_key(self, event: Key):
         if self._state != "idle":
