@@ -145,19 +145,6 @@ class RebaseTodoWidget(Widget):
         self._todo_state.select_single(event.commit_index)
         self._update()
 
-    def on_file_grid_clicked_file(self, event):
-        # toggle file
-        rebase_items = deepcopy(self._todo_state.get_current_items())
-        file_change = rebase_items[event.commit_index].file_changes[event.file_path]
-        file_change.included = not file_change.included
-        self._todo_state.modify_items(rebase_items)
-
-        # select commit
-        self._todo_state.set_cursor(event.commit_index)
-        self._todo_state.select_single(event.commit_index)
-
-        self._update()
-
     def action_copy(self):
         self._todo_state.insert_item(
             self._todo_state.get_active_item(), self._todo_state.cursor
