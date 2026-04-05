@@ -3,9 +3,12 @@ from typing import Optional
 
 from textual.containers import Horizontal
 
-from grexe.file_selector import FileSelector
-from grexe.rebase_todo_state import RebaseTodoState, RebaseTodoStateAndCursor
-from grexe.rebase_todo_widget import RebaseTodoWidget
+from grexe.widgets.file_selector import FileSelector
+from grexe.rebase_todo.rebase_todo_state import (
+    RebaseTodoState,
+    RebaseTodoStateAndCursor,
+)
+from grexe.widgets.rebase_todo_widget import RebaseTodoWidget
 
 
 class DefaultEditorWidget(Horizontal):
@@ -16,7 +19,7 @@ class DefaultEditorWidget(Horizontal):
     some files from that commit.
     """
 
-    CSS_PATH = "main.tcss"
+    CSS_PATH = "../styles/main.tcss"
 
     def __init__(
         self,

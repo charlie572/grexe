@@ -1,8 +1,12 @@
 from textual.containers import Horizontal
 
-from grexe.file_selector import FileSelector
-from grexe.rebase_todo_state import RebaseTodoState, RebaseTodoStateAndCursor
-from grexe.rebase_todo_widget import RebaseTodoWidget, get_files_modified
+from grexe.utility_functions import get_files_modified
+from grexe.widgets.file_selector import FileSelector
+from grexe.rebase_todo.rebase_todo_state import (
+    RebaseTodoState,
+    RebaseTodoStateAndCursor,
+)
+from grexe.widgets.rebase_todo_widget import RebaseTodoWidget
 from grexe.types import OptionalFile
 
 
@@ -14,7 +18,7 @@ class EditorWidgetWithFileGrid(Horizontal):
     FileGrid.
     """
 
-    CSS_PATH = "main.tcss"
+    CSS_PATH = "../styles/main.tcss"
 
     def __init__(
         self,

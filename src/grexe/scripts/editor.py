@@ -3,18 +3,17 @@ from typing import List, Optional
 
 from git import Repo
 from textual.app import App
-from textual.containers import Horizontal, Vertical
-from textual.widgets import TabbedContent, Label, Tabs, Tab, ContentSwitcher
+from textual.widgets import TabbedContent, Tabs
 
-from grexe.editor_widget_with_file_grid import EditorWidgetWithFileGrid
-from grexe.default_editor_widget import DefaultEditorWidget
-from grexe.rebase_todo_state import RebaseTodoState
+from grexe.widgets.editor_widget_with_file_grid import EditorWidgetWithFileGrid
+from grexe.widgets.default_editor_widget import DefaultEditorWidget
+from grexe.rebase_todo.rebase_todo_state import RebaseTodoState
 from grexe.rebasing import parse_rebase_items, create_rebase_todo_text
 from grexe.types import RebaseItem
 
 
 class GitRebaseExtendedEditor(App):
-    CSS_PATH = "main.tcss"
+    CSS_PATH = "../styles/main.tcss"
 
     BINDINGS = [
         ("enter", "submit", "Submit and perform rebase."),

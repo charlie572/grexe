@@ -21,8 +21,8 @@ classifiers = [
 Repository = "https://github.com/me/spam.git"
 
 [project.scripts]
-grexe-editor = "grexe.editor:main"
-grexe-edit-rebase-item = "grexe.edit_rebase_item:main"
+grexe-editor = "grexe.scripts.editor:main"
+grexe-edit-rebase-item = "grexe.scripts.edit_rebase_item:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

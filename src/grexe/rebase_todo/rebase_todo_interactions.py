@@ -3,8 +3,8 @@
 from copy import deepcopy
 from typing import List, Optional
 
-from grexe.distribute import distribute_changes
-from grexe.rebase_todo_state import RebaseTodoStateAndCursor
+from grexe.rebase_todo.distribute import distribute_changes
+from grexe.rebase_todo.rebase_todo_state import RebaseTodoStateAndCursor
 
 
 class RebaseItemMover:
