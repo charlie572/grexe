@@ -9,8 +9,14 @@ RebaseAction = Literal["pick", "drop", "edit", "reword", "squash", "fixup"]
 
 
 @dataclass
-class FileChange:
-    """A file that has been modified in a commit"""
+class OptionalFile:
+    """A file path and a boolean
+
+    This can be used in the following cases:
+    - Store a file that has been modified in a commit, which the user can optionally drop from the commit
+      by setting the boolean to False.
+    - Pass a list of files to a FileSelector, and have it highlight the ones with the boolean set to True.
+    """
 
     path: str | PathLike[str]
     # If the user wants to drop this file from the commit, they can set this to False.
@@ -22,5 +28,5 @@ class RebaseItem:
         self.action = action
         self.commit = commit
         self.file_changes = {
-            file: FileChange(file, True) for file in self.commit.stats.files.keys()
+            file: OptionalFile(file, True) for file in self.commit.stats.files.keys()
         }

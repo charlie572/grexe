@@ -13,6 +13,16 @@ Features:
 
 ![Screenshot of main UI.](images/main_screenshot.png)
 
+# Tabs
+
+There are two tabs:
+- Default Editor: Shows a FileSelector and a RebaseTodoWidget. The
+  FileSelector shows the files in the highlighted commit, and it can
+  be used to drop files from that commit. It doesn't show a file grid.
+- Editor With File Grid: It shows a FileSelector on the left side, and
+  a RebaseTodoWidget with a FileGrid on the right side. You can use
+  the FileSelector to select which files to show in the FileGrid.
+
 # Controls
 
 ## Basic controls

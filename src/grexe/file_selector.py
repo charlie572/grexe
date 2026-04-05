@@ -10,6 +10,8 @@ from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets._tree import TreeNode, TreeDataType
 
+from grexe.types import OptionalFile
+
 
 class FileSelector(Tree):
     class ChangedActiveFiles(Message):
@@ -19,44 +21,85 @@ class FileSelector(Tree):
 
     def __init__(
         self,
-        file_paths: Iterable[str | PathLike],
+        files: List[OptionalFile],
         *args,
         **kwargs,
     ):
-        self._common_path = os.path.commonpath(file_paths)
-
         super().__init__(
-            self._common_path,
-            data={"path": self._common_path, "active": True},
+            "",
             *args,
             **kwargs,
+        )
+
+        self._ctrl = False
+        self._mouse_button = None
+
+        self._common_path = ""
+
+        self.set_data(files, recompose=False)
+
+    def set_data(
+        self,
+        optional_files: List[OptionalFile],
+        recompose: bool = True,
+    ):
+        """Re-create the file hierarchy with the given file changes"""
+        if len(optional_files) == 0:
+            self._common_path = ""
+            self.reset("", data={"path": "", "active": True})
+            if recompose:
+                self.refresh(recompose=True)
+            return
+        elif len(optional_files) == 1:
+            self._common_path = ""
+            optional_file = optional_files[0]
+            self.reset(
+                optional_file.path,
+                data={"path": optional_files[0].path, "active": optional_file.included},
+            )
+            if recompose:
+                self.refresh(recompose=True)
+            return
+
+        self._common_path = os.path.commonpath(
+            [change.path for change in optional_files]
+        )
+
+        self.reset(
+            self._common_path,
+            data={"path": self._common_path, "active": True},
         )
 
         self.root.expand()
         self.root.allow_expand = False
 
-        file_paths = [os.path.relpath(path, self._common_path) for path in file_paths]
+        if len(optional_files) < 2:
+            return
+
         nodes: Dict[str : TreeNode[str]] = {"": self.root}
-        for path in file_paths:
-            path_elements = path.split(os.path.sep)
+        for optional_file in optional_files:
+            rel_path = os.path.relpath(optional_file.path, self._common_path)
+            path_elements = rel_path.split(os.path.sep)
             for i in range(len(path_elements)):
                 node_path = os.path.sep.join(path_elements[: i + 1])
-                if node_path not in nodes:
-                    parent_node_path = os.path.sep.join(path_elements[:i])
-                    parent_node = nodes[parent_node_path]
-                    node_name = path_elements[i]
-                    nodes[node_path] = parent_node.add(
-                        node_name,
-                        expand=True,
-                        allow_expand=False,
-                        data={
-                            "path": node_path,
-                            "active": True,
-                        },
-                    )
+                if node_path in nodes:
+                    continue
 
-        self._ctrl = False
-        self._mouse_button = None
+                parent_node_path = os.path.sep.join(path_elements[:i])
+                parent_node = nodes[parent_node_path]
+                node_name = path_elements[i]
+                nodes[node_path] = parent_node.add(
+                    node_name,
+                    expand=True,
+                    allow_expand=False,
+                    data={
+                        "path": node_path,
+                        "active": optional_file.included,
+                    },
+                )
+
+        if recompose:
+            self.refresh(recompose=True)
 
     def on_click(self, event: Click):
         self._mouse_button = event.button
