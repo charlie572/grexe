@@ -1,12 +1,14 @@
 import os
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 
 from textual.containers import Grid
 from textual.events import Click
 from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Label
 
 from splitsquash.types import RebaseItem
-from splitsquash.widgets.utility_widgets import FilenameLabel, FileChangeIndicator
+from splitsquash.widgets.utility_widgets import FilenameLabel
 
 
 class FileGrid(Grid):
@@ -198,12 +200,11 @@ class FileGrid(Grid):
 
             for j, file in enumerate(self._visible_files):
                 file_change = item.file_changes.get(file)
-                if file_change:
-                    selectable = True
-                    changed = file_change.included
-                else:
-                    selectable = False
-                    changed = False
+                if not file_change:
+                    yield Label("")
+                    continue
+
+                change_type = item.commit.stats.files[file_change.path]["change_type"]
 
                 active = (
                     i == self._active_index
@@ -211,4 +212,56 @@ class FileGrid(Grid):
                     and isinstance(item, RebaseItem)
                 )
 
-                yield FileChangeIndicator(changed, selectable, active, classes=classes)
+                yield FileChangeIndicator(
+                    change_type, file_change.included, active, classes=classes
+                )
+
+
+class FileChangeIndicator(Widget):
+    """An indicator to show in the FileGrid
+
+    :param change_type: The change type of the file from the Stats object
+                        See https://gitpython.readthedocs.io/en/stable/reference.html#git.util.Stats.
+                        A = Added, D = Deleted, M = Modified, R = Renamed, T = Changed in the type
+    :param included: False if the user has excluded this file from this commit.
+    :param active: True if the user's cursor is hovering over this file change (text cursor, not mouse).
+    """
+
+    def __init__(
+        self,
+        change_type: Literal["A", "D", "M", "R", "T"],
+        included: bool,
+        active: bool,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._change_type = change_type
+        self._included = included
+        self._active = active
+
+    def render(self):
+        change_type_colours = {
+            "A": "green",
+            "D": "red",
+            "M": "orange",
+            "R": "green",
+            "T": "blue",
+        }
+
+        content = (
+            self._change_type
+        )  # single letter indicated type of changed (added, deleted, etc.)
+
+        # white background if the (text) cursor is hovering over this widget
+        if self._active:
+            content = f"[on white]{content}[/]"
+
+        if self._included:
+            # File hasn't been excluded by user. Make it coloured
+            content = f"[{change_type_colours[self._change_type]}]{content}[/]"
+        else:
+            # File has been excluded by user. Make it non-coloured and add strikethrough.
+            content = f"[strike]{content}[/]"
+
+        return content
