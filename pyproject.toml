@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/me/spam.git"
+Repository = "https://github.com/charlie572/splitsquash"
 
 [project.scripts]
 splitsquash = "splitsquash.scripts.editor:main"
