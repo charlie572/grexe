@@ -1,9 +1,10 @@
 import os
 import subprocess
 from itertools import groupby
-from typing import List, Optional, Counter
+from tempfile import TemporaryDirectory
+from typing import List, Optional
 
-from git import Repo
+from git import Repo, Commit, GitCommandError
 
 from splitsquash.types import RebaseItem
 
@@ -104,3 +105,39 @@ def rebase(
     )
 
     return process.stdout.decode()
+
+
+def currently_rebasing_on(repo: Repo) -> Commit:
+    with open(".git/rebase-merge/onto", "r") as f:
+        commit_hash = f.read()
+
+    return repo.commit(commit_hash)
+
+
+def check_for_merge_conflicts(
+    repo: Repo,
+    commits: List[Commit],
+    onto: Commit,
+) -> List[int]:
+    """Given a repo list of commits to apply, return the indices of the commits which will cause merge conflicts"""
+
+    # 1. Create a temporary clone of the repo.
+    # 2. Apply each commit in turn in the temporary repo.
+    # 3. Terminate if there is a merge conflict.
+    # 4. Clean up the temporary repo.
+
+    with TemporaryDirectory() as temp_dir:
+        temp_repo = repo.clone(temp_dir)
+
+        temp_repo.git.checkout(onto)
+
+        for commit_index, commit in enumerate(commits):
+            try:
+                temp_repo.git.cherry_pick(commit)
+            except GitCommandError:
+                # Merge conflict
+                return [commit_index]
+
+            temp_repo.index.commit(commit.message)
+
+    return []

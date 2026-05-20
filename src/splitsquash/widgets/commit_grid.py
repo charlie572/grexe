@@ -1,10 +1,12 @@
 from typing import Tuple, Optional, List
 
+from git import Repo
 from textual.containers import Grid
 from textual.events import Click
 from textual.message import Message
 from textual.widgets import Label
 
+from splitsquash.rebasing import check_for_merge_conflicts, currently_rebasing_on
 from splitsquash.types import RebaseItem
 
 
@@ -31,7 +33,7 @@ class CommitGrid(Grid):
         self.styles.grid_gutter_vertical = 2
         self.styles.grid_rows = "1"
         self.styles.grid_size_rows = 1
-        self.styles.grid_size_columns = 4
+        self.styles.grid_size_columns = 5
         self.styles.height = 1
 
     def update_state(
@@ -67,15 +69,22 @@ class CommitGrid(Grid):
 
     def compose(self):
         # header row
-        yield Label("")
+        yield Label("Conflicts")
         yield Label("")
         yield Label("Lines changed")
+        yield Label("")
         yield Label("")
 
         # make boolean array from self._highlighted_indices
         highlighted = [False] * len(self._rebase_items)
         for i in self._highlighted_indices:
             highlighted[i] = True
+
+        # check for merge conflicts
+        commits = [item.commit for item in self._rebase_items if item.action != "drop"]
+        repo = Repo(".")
+        onto = currently_rebasing_on(repo)
+        items_with_conflicts = check_for_merge_conflicts(repo, commits, onto)
 
         # commit rows
         for i, item in enumerate(self._rebase_items):
@@ -85,6 +94,8 @@ class CommitGrid(Grid):
             if highlighted[i]:
                 classes.append("selected")
             classes = " ".join(classes)
+
+            yield Label("💥" if i in items_with_conflicts else "", classes=classes)
 
             yield Label(item.action, classes=f"rebase_action {classes}")
 
