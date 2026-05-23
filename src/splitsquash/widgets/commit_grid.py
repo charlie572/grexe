@@ -63,9 +63,7 @@ class CommitGrid(Grid):
             if child is not event.widget:
                 continue
 
-            print(child)
             if isinstance(child, Label) and child.content == "💥":
-                print("clicked merge conflict")
                 # Clicked merge conflict marker. Open the file content in a sidebar.
                 self.post_message(ViewFile("file content"))
 
