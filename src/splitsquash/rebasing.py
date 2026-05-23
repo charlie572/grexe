@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from itertools import groupby
 from tempfile import TemporaryDirectory
@@ -141,3 +142,50 @@ def check_for_merge_conflicts(
             temp_repo.index.commit(commit.message)
 
     return []
+
+
+def get_merge_conflict_text(
+    repo: Repo,
+    commits: List[Commit],
+    onto: Commit,
+):
+    """Get the text of a merge conflict
+
+    The last commit in the list must cause the merge conflict.
+    """
+    merge_conflict_regex = re.compile(
+        r"<<<<<<< HEAD\n(.*)\n=======\n(.*)\n>>>>>>> [0-9a-f]{7} \(.*\)",
+        flags=re.DOTALL,
+    )
+    merge_conflict_text = ""
+
+    with TemporaryDirectory() as temp_dir:
+        temp_repo = repo.clone(temp_dir)
+
+        temp_repo.git.checkout(onto)
+
+        for commit in commits[:-1]:
+            temp_repo.git.cherry_pick(commit)
+            temp_repo.index.commit(commit.message)
+
+        # Expect the last commit to cause a merge conflict, so cherry-picking
+        # should raise a GitCommandError.
+        try:
+            temp_repo.git.cherry_pick(commits[-1])
+        except GitCommandError:
+            pass
+        else:
+            raise RuntimeError("Expected a merge conflict, but didn't get one.")
+
+        for diff in temp_repo.index.diff(None).iter_change_type("M"):
+            separator_line = "-" * (len(diff.b_path) + 10) + "\n"
+            merge_conflict_text += separator_line + diff.b_path + "\n" + separator_line
+
+            with open(os.path.join(temp_repo.working_dir, diff.b_path), "r") as f:
+                file_content = f.read()
+
+            # TODO: add context lines
+            for match in merge_conflict_regex.finditer(file_content):
+                merge_conflict_text += match.group(0)
+
+    return merge_conflict_text

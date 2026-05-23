@@ -51,6 +51,7 @@ class GitRebaseExtendedEditor(App):
         editor_widget.set_rebase_todo_state(self._rebase_todo_state, recompose=True)
 
     def on_view_file(self, event: ViewFile):
+        # TODO: add close button
         self._file_view_widget = TextArea(
             event.file_content,
             language=event.language,
