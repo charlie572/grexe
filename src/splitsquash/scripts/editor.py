@@ -3,8 +3,10 @@ from typing import List, Optional
 
 from git import Repo
 from textual.app import App
-from textual.widgets import TabbedContent, Tabs
+from textual.containers import Horizontal
+from textual.widgets import TabbedContent, Tabs, TextArea
 
+from splitsquash.messages import ViewFile
 from splitsquash.widgets.editor_widget_with_file_grid import EditorWidgetWithFileGrid
 from splitsquash.widgets.default_editor_widget import DefaultEditorWidget
 from splitsquash.rebase_todo.rebase_todo_state import RebaseTodoState
@@ -28,6 +30,7 @@ class GitRebaseExtendedEditor(App):
             "Default Editor": DefaultEditorWidget(self._rebase_todo_state),
             "Editor With File Grid": EditorWidgetWithFileGrid(self._rebase_todo_state),
         }
+        self._file_view_widget: Optional[TextArea] = None
 
     def action_quit(self) -> None:
         # Return exit code 1, so the rebase isn't performed.
@@ -47,10 +50,27 @@ class GitRebaseExtendedEditor(App):
         editor_widget = self._editor_widgets[event.tab.label]
         editor_widget.set_rebase_todo_state(self._rebase_todo_state, recompose=True)
 
+    def on_view_file(self, event: ViewFile):
+        self._file_view_widget = TextArea(
+            event.file_content,
+            language=event.language,
+            show_line_numbers=True,
+            read_only=True,
+        )
+        self.refresh(recompose=True)
+
     def compose(self):
-        with TabbedContent("Default Editor", "Editor With File Grid"):
-            yield self._editor_widgets["Default Editor"]
-            yield self._editor_widgets["Editor With File Grid"]
+        with Horizontal():
+            with TabbedContent(
+                "Default Editor", "Editor With File Grid"
+            ) as tabbed_content:
+                tabbed_content.styles.width = "2fr"
+                yield self._editor_widgets["Default Editor"]
+                yield self._editor_widgets["Editor With File Grid"]
+
+            if self._file_view_widget is not None:
+                self._file_view_widget.styles.width = "1fr"
+                yield self._file_view_widget
 
 
 def main():

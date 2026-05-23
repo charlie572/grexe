@@ -6,6 +6,7 @@ from textual.events import Click
 from textual.message import Message
 from textual.widgets import Label
 
+from splitsquash.messages import ViewFile
 from splitsquash.rebasing import check_for_merge_conflicts, currently_rebasing_on
 from splitsquash.types import RebaseItem
 
@@ -62,7 +63,13 @@ class CommitGrid(Grid):
             if child is not event.widget:
                 continue
 
-            commit_index = child_index // 3 - 1
+            print(child)
+            if isinstance(child, Label) and child.content == "💥":
+                print("clicked merge conflict")
+                # Clicked merge conflict marker. Open the file content in a sidebar.
+                self.post_message(ViewFile("file content"))
+
+            commit_index = child_index // self.styles.grid_size_columns - 1
             self.post_message(self.ClickedCommit(commit_index))
 
             return
