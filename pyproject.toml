@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "GitPython",
-    "textual"
+    "textual[syntax]"
 ]
 
 [project.urls]
