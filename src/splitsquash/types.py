@@ -20,7 +20,6 @@ class OptionalFile:
     """
 
     path: str | PathLike[str]
-    # If the user wants to drop this file from the commit, they can set this to False.
     included: bool
 
 
