@@ -148,6 +148,7 @@ def get_merge_conflict_text(
     repo: Repo,
     commits: List[Commit],
     onto: Commit,
+    num_context_lines: int = 3,
 ):
     """Get the text of a merge conflict
 
@@ -177,15 +178,38 @@ def get_merge_conflict_text(
         else:
             raise RuntimeError("Expected a merge conflict, but didn't get one.")
 
+        # add merge conflicts from each file to merge_conflict_text
         for diff in temp_repo.index.diff(None).iter_change_type("M"):
+            # add heading with file name
             separator_line = "-" * (len(diff.b_path) + 10) + "\n"
             merge_conflict_text += separator_line + diff.b_path + "\n" + separator_line
 
             with open(os.path.join(temp_repo.working_dir, diff.b_path), "r") as f:
                 file_content = f.read()
 
-            # TODO: add context lines
+            # add merge conflict text for this file
             for match in merge_conflict_regex.finditer(file_content):
-                merge_conflict_text += match.group(0)
+                # get merge conflict lines from match, and add context lines
+                previous_lines = file_content[: match.start()].split("\n")
+                # The last element will be empty, since the match begins just before a new line. Remove it.
+                previous_lines.pop(-1)
+                conflict_lines = match.group(0).split("\n")
+                next_lines = file_content[match.end()].split("\n")
+                display_lines = (
+                    previous_lines[:-num_context_lines]
+                    + conflict_lines
+                    + next_lines[:num_context_lines]
+                )
+
+                # add line numbers
+                first_line_number = max(1, len(previous_lines) - num_context_lines + 1)
+                last_line_number = first_line_number + len(display_lines) - 1
+                line_number_digits = len(str(last_line_number))
+                display_lines = [
+                    f"{first_line_number + n:{line_number_digits}} {line}"
+                    for n, line in enumerate(display_lines)
+                ]
+
+                merge_conflict_text += "\n".join(display_lines)
 
     return merge_conflict_text
