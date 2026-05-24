@@ -54,8 +54,6 @@ class GitRebaseExtendedEditor(App):
         # TODO: add close button
         self._file_view_widget = TextArea(
             event.file_content,
-            language=event.language,
-            show_line_numbers=True,
             read_only=True,
         )
         self.refresh(recompose=True)
