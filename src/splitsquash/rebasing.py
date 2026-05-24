@@ -121,12 +121,30 @@ def check_for_merge_conflicts(
     rebase_items: Tuple[RebaseItem, ...],
     onto: Commit,
 ) -> List[int]:
-    """Given a repo list of commits to apply, return the indices of the commits which will cause merge conflicts"""
+    """Given a repo list of commits to apply, return the indices of the commits which will cause merge conflicts
+
+    This function only detects the first merge conflict for each file. There may be later conflicts, but this function
+    doesn't return them.We can't know what the file will look like after the first merge conflict is resolved, so it is
+    difficult to know if there will be merge conflicts later. One solution could be to keep track of lines the
+    conflicted, and keep checking for conflicts on lines that haven't conflicted yet. But for now, it just detects the
+    first conflict on each file.
+
+    The output of this function is reliable if there are no edits. So if no commits are modified during the rebase,
+    then the commits at the indices it returns will definitely cause merge conflicts. But if there are edits, then these
+    may cause additional merge conflicts, or fix later merge conflicts.
+    """
 
     # 1. Create a temporary clone of the repo.
     # 2. Apply each commit in turn in the temporary repo.
     # 3. Terminate if there is a merge conflict.
     # 4. Clean up the temporary repo.
+
+    conflicting_commit_indices = []
+
+    # File paths that have conflicted so far. Make sure these aren't committed
+    # again after a conflict is detected, since we are only looking for the
+    # first conflict for each file.
+    conflicting_files = set()
 
     with TemporaryDirectory() as temp_dir:
         temp_repo = repo.clone(temp_dir)
@@ -149,39 +167,38 @@ def check_for_merge_conflicts(
                     if (
                         change.included
                         and change.path in temp_repo.index.unmerged_blobs()
+                        and change.path not in conflicting_files
                     ):
                         # Merge conflict on included file
-                        return [commit_index]
+                        conflicting_files.add(change.path)
+                        conflicting_commit_indices.append(commit_index)
 
-            excluded_paths = [
-                change.path
-                for change in item.file_changes.values()
-                if not change.included
-            ]
+            # remove excluded files and conflicting files from the index before committing
+            for change in item.file_changes.values():
+                if change.included and change.path not in conflicting_files:
+                    continue
 
-            # remove excluded files from the index before committing
-            for excluded_path in excluded_paths:
                 unmerged_blobs = temp_repo.index.unmerged_blobs()
 
                 # check if there was a merge conflict on this excluded file
-                if excluded_path in unmerged_blobs:
+                if change.path in unmerged_blobs:
                     # Merge conflict
                     # Reset the file back to what it was before the cherry-pick (the stage 2 blob).
                     target_branch_blob = [
                         blob
-                        for (stage, blob) in unmerged_blobs[excluded_path]
+                        for (stage, blob) in unmerged_blobs[change.path]
                         if stage == 2
                     ]
                     assert len(target_branch_blob) == 1
                     temp_repo.index.resolve_blobs(target_branch_blob).write()
                 else:
                     # No merge conflict. Just reset the file.
-                    temp_repo.index.reset(paths=[excluded_path], working_tree=True)
+                    temp_repo.index.reset(paths=[change.path], working_tree=True)
                     continue
 
             temp_repo.index.commit(item.commit.message)
 
-    return []
+    return conflicting_commit_indices
 
 
 def get_merge_conflict_text(
