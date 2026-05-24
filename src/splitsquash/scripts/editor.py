@@ -3,8 +3,8 @@ from typing import List, Optional
 
 from git import Repo
 from textual.app import App
-from textual.containers import Horizontal
-from textual.widgets import TabbedContent, Tabs, TextArea
+from textual.containers import Horizontal, Vertical
+from textual.widgets import TabbedContent, Tabs, TextArea, Button
 
 from splitsquash.messages import ViewFile
 from splitsquash.widgets.editor_widget_with_file_grid import EditorWidgetWithFileGrid
@@ -51,12 +51,21 @@ class GitRebaseExtendedEditor(App):
         editor_widget.set_rebase_todo_state(self._rebase_todo_state, recompose=True)
 
     def on_view_file(self, event: ViewFile):
-        # TODO: add close button
-        self._file_view_widget = TextArea(
-            event.file_content,
-            read_only=True,
+        # Show a text viewer widget with the provided text
+        self._file_view_widget = Vertical()
+        self._file_view_widget.compose_add_child(Button("Close Text Viewer"))
+        self._file_view_widget.compose_add_child(
+            TextArea(
+                event.file_content,
+                read_only=True,
+            )
         )
         self.refresh(recompose=True)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.label == "Close Text Viewer":
+            self._file_view_widget = None
+            self.refresh(recompose=True)
 
     def compose(self):
         with Horizontal():
