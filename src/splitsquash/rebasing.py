@@ -1,9 +1,10 @@
 import os
 import re
+import shutil
 import subprocess
 from itertools import groupby
 from tempfile import TemporaryDirectory
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from git import Repo, Commit, GitCommandError
 
@@ -117,7 +118,7 @@ def currently_rebasing_on(repo: Repo) -> Commit:
 
 def check_for_merge_conflicts(
     repo: Repo,
-    commits: List[Commit],
+    rebase_items: Tuple[RebaseItem, ...],
     onto: Commit,
 ) -> List[int]:
     """Given a repo list of commits to apply, return the indices of the commits which will cause merge conflicts"""
@@ -132,14 +133,52 @@ def check_for_merge_conflicts(
 
         temp_repo.git.checkout(onto)
 
-        for commit_index, commit in enumerate(commits):
-            try:
-                temp_repo.git.cherry_pick(commit)
-            except GitCommandError:
-                # Merge conflict
-                return [commit_index]
+        for commit_index, item in enumerate(rebase_items):
+            if item.action == "drop":
+                continue
 
-            temp_repo.index.commit(commit.message)
+            # Cherry-pick without commiting, remove the excluded files, then commit.
+
+            try:
+                temp_repo.git.cherry_pick(item.commit, n=True)
+            except GitCommandError:
+                # Cherry-pick caused a merge conflict.
+                # This is only a genuine merge conflict if the conflict is on an included file. Check
+                # if it is on an included file.
+                for change in item.file_changes.values():
+                    if not change.included:
+                        continue
+                    if change.path in temp_repo.index.unmerged_blobs():
+                        # Merge conflict on included file
+                        return [commit_index]
+
+            excluded_paths = [
+                change.path
+                for change in item.file_changes.values()
+                if not change.included
+            ]
+
+            # remove excluded files from the index before committing
+            for excluded_path in excluded_paths:
+                unmerged_blobs = temp_repo.index.unmerged_blobs()
+
+                # check if there was a merge conflict on this excluded file
+                if excluded_path in unmerged_blobs:
+                    # Merge conflict
+                    # Reset the file back to what it was before the cherry-pick (the stage 2 blob).
+                    target_branch_blob = [
+                        blob
+                        for (stage, blob) in unmerged_blobs[excluded_path]
+                        if stage == 2
+                    ]
+                    assert len(target_branch_blob) == 1
+                    temp_repo.index.resolve_blobs(target_branch_blob).write()
+                else:
+                    # No merge conflict. Just reset the file.
+                    temp_repo.index.reset(paths=[excluded_path], working_tree=True)
+                    continue
+
+            temp_repo.index.commit(item.commit.message)
 
     return []
 

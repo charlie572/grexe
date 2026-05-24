@@ -96,10 +96,9 @@ class CommitGrid(Grid):
             highlighted[i] = True
 
         # check for merge conflicts
-        commits = [item.commit for item in self._rebase_items if item.action != "drop"]
         repo = Repo(".")
         onto = currently_rebasing_on(repo)
-        items_with_conflicts = check_for_merge_conflicts(repo, commits, onto)
+        items_with_conflicts = check_for_merge_conflicts(repo, self._rebase_items, onto)
 
         # commit rows
         for i, item in enumerate(self._rebase_items):
