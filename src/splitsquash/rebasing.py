@@ -146,9 +146,10 @@ def check_for_merge_conflicts(
                 # This is only a genuine merge conflict if the conflict is on an included file. Check
                 # if it is on an included file.
                 for change in item.file_changes.values():
-                    if not change.included:
-                        continue
-                    if change.path in temp_repo.index.unmerged_blobs():
+                    if (
+                        change.included
+                        and change.path in temp_repo.index.unmerged_blobs()
+                    ):
                         # Merge conflict on included file
                         return [commit_index]
 
