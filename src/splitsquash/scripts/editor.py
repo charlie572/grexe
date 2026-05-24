@@ -6,6 +6,7 @@ from textual.app import App
 from textual.containers import Horizontal, Vertical
 from textual.widgets import TabbedContent, Tabs, TextArea, Button
 
+from splitsquash.merge_conflicts import MergeConflictDetectorSingleton
 from splitsquash.messages import OpenTextViewer
 from splitsquash.widgets.editor_widget_with_file_grid import EditorWidgetWithFileGrid
 from splitsquash.widgets.default_editor_widget import DefaultEditorWidget
@@ -96,8 +97,14 @@ def main():
         rebase_todo_text = f.read()
     rebase_items = parse_rebase_items(rebase_todo_text, repo)
 
-    app = GitRebaseExtendedEditor(rebase_items)
-    app.run()
+    conflict_detector = MergeConflictDetectorSingleton()
+    conflict_detector.setup()
+
+    try:
+        app = GitRebaseExtendedEditor(rebase_items)
+        app.run()
+    finally:
+        conflict_detector.cleanup()
 
     new_rebase_todo_text = app.get_result()
     if new_rebase_todo_text is not None:
