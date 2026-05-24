@@ -6,7 +6,7 @@ from textual.app import App
 from textual.containers import Horizontal, Vertical
 from textual.widgets import TabbedContent, Tabs, TextArea, Button
 
-from splitsquash.messages import ViewFile
+from splitsquash.messages import OpenTextViewer
 from splitsquash.widgets.editor_widget_with_file_grid import EditorWidgetWithFileGrid
 from splitsquash.widgets.default_editor_widget import DefaultEditorWidget
 from splitsquash.rebase_todo.rebase_todo_state import RebaseTodoState
@@ -30,7 +30,7 @@ class GitRebaseExtendedEditor(App):
             "Default Editor": DefaultEditorWidget(self._rebase_todo_state),
             "Editor With File Grid": EditorWidgetWithFileGrid(self._rebase_todo_state),
         }
-        self._file_view_widget: Optional[TextArea] = None
+        self._text_view_widget: Optional[TextArea] = None
 
     def action_quit(self) -> None:
         # Return exit code 1, so the rebase isn't performed.
@@ -50,11 +50,11 @@ class GitRebaseExtendedEditor(App):
         editor_widget = self._editor_widgets[event.tab.label]
         editor_widget.set_rebase_todo_state(self._rebase_todo_state, recompose=True)
 
-    def on_view_file(self, event: ViewFile):
+    def on_open_text_viewer(self, event: OpenTextViewer):
         # Show a text viewer widget with the provided text
-        self._file_view_widget = Vertical()
-        self._file_view_widget.compose_add_child(Button("Close Text Viewer"))
-        self._file_view_widget.compose_add_child(
+        self._text_view_widget = Vertical()
+        self._text_view_widget.compose_add_child(Button("Close Text Viewer"))
+        self._text_view_widget.compose_add_child(
             TextArea(
                 event.file_content,
                 read_only=True,
@@ -64,7 +64,7 @@ class GitRebaseExtendedEditor(App):
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.label == "Close Text Viewer":
-            self._file_view_widget = None
+            self._text_view_widget = None
             self.refresh(recompose=True)
 
     def compose(self):
@@ -76,9 +76,9 @@ class GitRebaseExtendedEditor(App):
                 yield self._editor_widgets["Default Editor"]
                 yield self._editor_widgets["Editor With File Grid"]
 
-            if self._file_view_widget is not None:
-                self._file_view_widget.styles.width = "1fr"
-                yield self._file_view_widget
+            if self._text_view_widget is not None:
+                self._text_view_widget.styles.width = "1fr"
+                yield self._text_view_widget
 
 
 def main():

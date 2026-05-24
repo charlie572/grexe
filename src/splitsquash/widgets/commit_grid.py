@@ -6,7 +6,7 @@ from textual.events import Click
 from textual.message import Message
 from textual.widgets import Label
 
-from splitsquash.messages import ViewFile
+from splitsquash.messages import OpenTextViewer
 from splitsquash.rebasing import (
     check_for_merge_conflicts,
     currently_rebasing_on,
@@ -76,7 +76,7 @@ class CommitGrid(Grid):
                 merge_conflict_text = get_merge_conflict_text(
                     repo, commits[: commit_index + 1], currently_rebasing_on(repo)
                 )
-                self.post_message(ViewFile(merge_conflict_text))
+                self.post_message(OpenTextViewer(merge_conflict_text))
             else:
                 self.post_message(self.ClickedCommit(commit_index))
 
