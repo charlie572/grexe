@@ -6,12 +6,9 @@ from textual.events import Click
 from textual.message import Message
 from textual.widgets import Label
 
+from splitsquash.merge_conflicts import MergeConflictDetectorSingleton
 from splitsquash.messages import OpenTextViewer
-from splitsquash.rebasing import (
-    check_for_merge_conflicts,
-    currently_rebasing_on,
-    get_merge_conflict_text,
-)
+from splitsquash.rebasing import currently_rebasing_on
 from splitsquash.types import RebaseItem
 
 
@@ -73,8 +70,10 @@ class CommitGrid(Grid):
                 # Clicked merge conflict marker. Open the file content in a sidebar.
                 commits = [item.commit for item in self._rebase_items]
                 repo = Repo(".")
-                merge_conflict_text = get_merge_conflict_text(
-                    repo, commits[: commit_index + 1], currently_rebasing_on(repo)
+                merge_conflict_text = (
+                    MergeConflictDetectorSingleton().get_merge_conflict_text(
+                        commits[: commit_index + 1], currently_rebasing_on(repo)
+                    )
                 )
                 self.post_message(OpenTextViewer(merge_conflict_text))
             else:
@@ -96,9 +95,12 @@ class CommitGrid(Grid):
             highlighted[i] = True
 
         # check for merge conflicts
-        repo = Repo(".")
-        onto = currently_rebasing_on(repo)
-        items_with_conflicts = check_for_merge_conflicts(repo, self._rebase_items, onto)
+        onto = currently_rebasing_on(Repo("."))
+        items_with_conflicts = (
+            MergeConflictDetectorSingleton().check_for_merge_conflicts(
+                self._rebase_items, onto
+            )
+        )
 
         # commit rows
         for i, item in enumerate(self._rebase_items):
