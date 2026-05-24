@@ -1,10 +1,7 @@
-from typing import Optional
-
 from textual.message import Message
 
 
-# TODO: rename
-class ViewFile(Message):
+class OpenTextViewer(Message):
     """Trigger this to open a file in a sidebar"""
 
     def __init__(self, file_content: str):
