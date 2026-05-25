@@ -1,10 +1,12 @@
 from typing import Tuple, Optional, List
 
 from git import Repo
+from textual import worker, work
 from textual.containers import Grid
 from textual.events import Click
 from textual.message import Message
 from textual.widgets import Label
+from textual.worker import get_current_worker
 
 from splitsquash.merge_conflicts import MergeConflictDetectorSingleton
 from splitsquash.messages import OpenTextViewer
@@ -59,6 +61,32 @@ class CommitGrid(Grid):
         if recompose:
             self.refresh(recompose=True)
 
+    @work(exclusive=True, thread=True)
+    def _update_merge_conflict_warnings(self):
+        # This is done in a separate thread, because it may be expensive. It
+        # requires cherry-picking commits in a temporary repo.
+
+        worker = get_current_worker()
+
+        onto = currently_rebasing_on(Repo("."))
+        conflicting_item_indices = (
+            MergeConflictDetectorSingleton().check_for_merge_conflicts(
+                self._rebase_items, onto
+            )
+        )
+
+        if not worker.is_cancelled:
+            self.app.call_from_thread(
+                self._set_merge_conflict_warnings, conflicting_item_indices
+            )
+
+    def _set_merge_conflict_warnings(self, conflicting_item_indices):
+        conflict_warnings = self.query_children(".conflict_warning")
+        for rebase_item_index, conflict_warning in enumerate(conflict_warnings):
+            conflict_warning.content = (
+                "💥" if rebase_item_index in conflicting_item_indices else ""
+            )
+
     def on_click(self, event: Click):
         for child_index, child in enumerate(self.children):
             if child is not event.widget:
@@ -94,14 +122,6 @@ class CommitGrid(Grid):
         for i in self._highlighted_indices:
             highlighted[i] = True
 
-        # check for merge conflicts
-        onto = currently_rebasing_on(Repo("."))
-        items_with_conflicts = (
-            MergeConflictDetectorSingleton().check_for_merge_conflicts(
-                self._rebase_items, onto
-            )
-        )
-
         # commit rows
         for i, item in enumerate(self._rebase_items):
             classes = []
@@ -111,7 +131,7 @@ class CommitGrid(Grid):
                 classes.append("selected")
             classes = " ".join(classes)
 
-            yield Label("💥" if i in items_with_conflicts else "", classes=classes)
+            yield Label("", classes=f"conflict_warning {classes}")
 
             yield Label(item.action, classes=f"rebase_action {classes}")
 
@@ -123,3 +143,5 @@ class CommitGrid(Grid):
 
             first_message_line = item.commit.message.split("\n")[0]
             yield Label(first_message_line, classes=f"commit_message {classes}")
+
+        self._update_merge_conflict_warnings()

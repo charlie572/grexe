@@ -21,7 +21,10 @@ class MergeConflictDetectorSingleton:
         return cls.instance
 
     def setup(self):
-        self.temp_dir = tempfile.mkdtemp()
+        TEMP_DIR_PARENT = "/tmp/splitsquash"
+        os.makedirs(TEMP_DIR_PARENT, exist_ok=True)
+        self.temp_dir = tempfile.mkdtemp(dir=TEMP_DIR_PARENT)
+
         self.temp_repo = self.original_repo.clone(self.temp_dir)
 
     def cleanup(self):
@@ -59,6 +62,7 @@ class MergeConflictDetectorSingleton:
         # first conflict for each file.
         conflicting_files = set()
 
+        self.temp_repo.index.reset(working_tree=True)
         self.temp_repo.git.checkout(onto)
 
         for commit_index, item in enumerate(rebase_items):
