@@ -68,10 +68,9 @@ class CommitGrid(Grid):
 
         worker = get_current_worker()
 
-        onto = currently_rebasing_on(Repo("."))
         conflicting_item_indices = (
             MergeConflictDetectorSingleton().check_for_merge_conflicts(
-                self._rebase_items, onto
+                self._rebase_items
             )
         )
 
@@ -92,20 +91,18 @@ class CommitGrid(Grid):
             if child is not event.widget:
                 continue
 
-            commit_index = child_index // self.styles.grid_size_columns - 1
+            item_index = child_index // self.styles.grid_size_columns - 1
 
             if isinstance(child, Label) and child.content == "💥":
                 # Clicked merge conflict marker. Open the file content in a sidebar.
-                commits = [item.commit for item in self._rebase_items]
-                repo = Repo(".")
                 merge_conflict_text = (
                     MergeConflictDetectorSingleton().get_merge_conflict_text(
-                        commits[: commit_index + 1], currently_rebasing_on(repo)
+                        self._rebase_items[: item_index + 1]
                     )
                 )
                 self.post_message(OpenTextViewer(merge_conflict_text))
             else:
-                self.post_message(self.ClickedCommit(commit_index))
+                self.post_message(self.ClickedCommit(item_index))
 
             return
 
