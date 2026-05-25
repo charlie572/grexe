@@ -1,8 +1,10 @@
+import hashlib
 import os
 import re
 import shutil
 import tempfile
 import threading
+from datetime import datetime
 from typing import List, Tuple, Optional, Dict
 
 from git import GitCommandError, Repo
@@ -26,17 +28,48 @@ class CherryPickCacheKey:
         ]
         self._included_file_paths = tuple(sorted(file_paths))
 
+    def nonrandom_hash(self):
+        """Get a thread-safe, non-random hash
+
+        Python adds an unpredictable salt to the hash values. This salt
+        is the same for the duration of a particular invocation of Python,
+        but it is different for different threads. This means this class
+        cannot be used in multiple threads. If you only need this class
+        for a key in a dictionary, then you can use this method as the key.
+        This method will return the same value in every thread, with the
+        same data given as input.
+        """
+        return hashlib.sha1(
+            self._base_hash.encode()
+            + self._cherry_picked_hash.encode()
+            + b"".join(p.encode() for p in self._included_file_paths)
+        ).digest()
+
     def __hash__(self):
         obj = (self._base_hash, self._cherry_picked_hash, self._included_file_paths)
         return hash(obj)
 
+    def __eq__(self, other):
+        if not isinstance(other, CherryPickCacheKey):
+            return False
+
+        obj = (self._base_hash, self._cherry_picked_hash, self._included_file_paths)
+        other_obj = (
+            other._base_hash,
+            other._cherry_picked_hash,
+            other._included_file_paths,
+        )
+        return obj == other_obj
+
 
 class CherryPickCache:
-    def __init__(self):
+    def __init__(self, onto: str):
+        self._onto = onto
+
         # Each entry of this dictionary corresponds to the cached result of cherry-picking
-        # a single commit. If you had the entry (h1, h2) -> h3, then h3 is the commit hash
-        # created when cherry-picking h2 on top of h1. h1, h2, and h3 are commit hashes.
-        self._cherry_picked_commit_ids: Dict[CherryPickCacheKey, str] = {}
+        # a single commit. The keys are obtained by CherryPickCacheKey.nonrandom_hash. Each
+        # value is the hash of the commit resulting from that cherry-pick.
+        self._cherry_picked_commit_ids: Dict[bytes, str] = {}
 
         # Maps commit ids to merge conflict text. This is human-readable text describing a
         # merge conflict, including a diff and file paths.
@@ -50,13 +83,11 @@ class CherryPickCache:
         merge_conflict_text: str,
     ):
         """Call this time each time you do a cherry-pick in the temporary repo, and want to cache it"""
-        key = CherryPickCacheKey(base_commit, cherry_picked_item)
+        key = CherryPickCacheKey(base_commit, cherry_picked_item).nonrandom_hash()
         self._cherry_picked_commit_ids[key] = result_commit
         self._merge_conflict_texts[result_commit] = merge_conflict_text
 
-    def get_cached_commit(
-        self, rebase_items: List[RebaseItem]
-    ) -> Tuple[Optional[str], int]:
+    def get_cached_commit(self, rebase_items: List[RebaseItem]) -> Tuple[str, int]:
         """If you're about the cherry-pick all these commits, use this function check the cache first
 
         We return (result_commit_id, commit_index_still_to_apply).
@@ -64,14 +95,17 @@ class CherryPickCache:
         It returns a commit hash, which is the result of the cherry-pick. We might have only cached
         part of the cherry-pick. In this case, we return a commit hash that is the result of
         cherry-picking the first few commits. We also return the index of the first commit we still
-        need to apply. If we haven't cached any of these cherry-picks, we return (None, 0).
+        need to apply. If we haven't cached any of these cherry-picks, we return (self._onto, 0).
         """
-        current_result_commit = None
+        current_result_commit = self._onto
         for item_index, rebase_item in enumerate(rebase_items):
             if rebase_item.action == "drop":
                 continue
 
-            key = CherryPickCacheKey(current_result_commit, rebase_item)
+            key = CherryPickCacheKey(
+                current_result_commit, rebase_item
+            ).nonrandom_hash()
+            print(f"{len(self._cherry_picked_commit_ids)=}")
             if key in self._cherry_picked_commit_ids:
                 current_result_commit = self._cherry_picked_commit_ids[key]
             else:
@@ -91,7 +125,7 @@ class MergeConflictDetectorSingleton:
     original_repo = Repo(".")
     temp_dir: Optional[str] = None
     temp_repo: Optional[Repo] = None
-    _cache = CherryPickCache()
+    _cache: Optional[CherryPickCache] = None
     _lock = threading.Lock()
 
     # This is updated every time we check for merge conflicts.
@@ -105,6 +139,11 @@ class MergeConflictDetectorSingleton:
     def __new__(cls):
         if cls.instance is None:
             cls.instance = super().__new__(cls)
+
+            repo = Repo(".")
+            onto = currently_rebasing_on(repo)
+            cls._cache = CherryPickCache(onto.hexsha)
+
         return cls.instance
 
     def setup(self):
@@ -220,7 +259,19 @@ class MergeConflictDetectorSingleton:
                     )
                     continue
 
-            result_commit = self.temp_repo.index.commit(rebase_item.commit.message)
+            result_commit = self.temp_repo.index.commit(
+                rebase_item.commit.message,
+                author=rebase_item.commit.author,
+                committer=rebase_item.commit.committer,
+                author_date=datetime.fromtimestamp(
+                    rebase_item.commit.authored_date
+                ).isoformat(),
+                commit_date=datetime.fromtimestamp(
+                    rebase_item.commit.committed_date
+                ).isoformat(),
+                trailers=rebase_item.commit.trailers_list,
+                skip_hooks=True,
+            )
 
             self._cache.add(
                 result_commit.parents[0].hexsha,
