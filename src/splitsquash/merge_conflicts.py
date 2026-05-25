@@ -4,6 +4,7 @@ import re
 import shutil
 import tempfile
 import threading
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict
 
@@ -62,18 +63,30 @@ class CherryPickCacheKey:
         return obj == other_obj
 
 
+@dataclass
+class CherryPickCacheValue:
+    """Represents the result of a cherry-pick in the check_for_merge_conflicts function
+
+    This cherry-pick may have caused a merge conflict. In that case,
+    only the non-conflicting files will be committed. This class
+    contains the merge conflict text if there was a merge conflict.
+    """
+
+    commit_hash: str
+    merge_conflict_text: Optional[str]
+    # conflicting file paths in all cherry-picked commits, up to and including this one.
+    conflicting_file_paths_total: Tuple[str]
+    # Conflicting commit indices, up to and including this one. 0 is the first commit that was cherry-picked.
+    conflicting_commit_indices: Tuple[str]
+
+
 class CherryPickCache:
     def __init__(self, onto: str):
         self._onto = onto
 
         # Each entry of this dictionary corresponds to the cached result of cherry-picking
-        # a single commit. The keys are obtained by CherryPickCacheKey.nonrandom_hash. Each
-        # value is the hash of the commit resulting from that cherry-pick.
-        self._cherry_picked_commit_ids: Dict[bytes, str] = {}
-
-        # Maps commit ids to merge conflict text. This is human-readable text describing a
-        # merge conflict, including a diff and file paths.
-        self._merge_conflict_texts: Dict[str, str] = {}
+        # a single commit. The keys are obtained by CherryPickCacheKey.nonrandom_hash.
+        self._cache: Dict[bytes, CherryPickCacheValue] = {}
 
     def add(
         self,
@@ -81,43 +94,39 @@ class CherryPickCache:
         cherry_picked_item: RebaseItem,
         result_commit: str,
         merge_conflict_text: str,
+        conflicting_file_paths_total: Tuple[str],
+        conflicting_commit_indices: Tuple[str],
     ):
         """Call this time each time you do a cherry-pick in the temporary repo, and want to cache it"""
         key = CherryPickCacheKey(base_commit, cherry_picked_item).nonrandom_hash()
-        self._cherry_picked_commit_ids[key] = result_commit
-        self._merge_conflict_texts[result_commit] = merge_conflict_text
+        self._cache[key] = CherryPickCacheValue(
+            result_commit,
+            merge_conflict_text,
+            conflicting_file_paths_total,
+            conflicting_commit_indices,
+        )
 
-    def get_cached_commit(self, rebase_items: List[RebaseItem]) -> Tuple[str, int]:
+    def check_cache(self, rebase_items: List[RebaseItem]) -> List[CherryPickCacheValue]:
         """If you're about the cherry-pick all these commits, use this function check the cache first
 
-        We return (result_commit_id, commit_index_still_to_apply).
-
-        It returns a commit hash, which is the result of the cherry-pick. We might have only cached
-        part of the cherry-pick. In this case, we return a commit hash that is the result of
-        cherry-picking the first few commits. We also return the index of the first commit we still
-        need to apply. If we haven't cached any of these cherry-picks, we return (self._onto, 0).
+        It returns one CherryPickCacheValue for each RebaseItem, plus another one at the start for the base
+        commit. It may return fewer items if they aren't all in the cache.
         """
-        current_result_commit = self._onto
+        cache_values = [CherryPickCacheValue(self._onto, None, tuple(), tuple())]
         for item_index, rebase_item in enumerate(rebase_items):
             if rebase_item.action == "drop":
                 continue
 
             key = CherryPickCacheKey(
-                current_result_commit, rebase_item
+                cache_values[-1].commit_hash, rebase_item
             ).nonrandom_hash()
-            print(f"{len(self._cherry_picked_commit_ids)=}")
-            if key in self._cherry_picked_commit_ids:
-                current_result_commit = self._cherry_picked_commit_ids[key]
+            print(f"{len(self._cache)=}")
+            if key in self._cache:
+                cache_values.append(self._cache[key])
             else:
-                return current_result_commit, item_index
+                return cache_values
 
-        return current_result_commit, len(rebase_items)
-
-    def get_cached_merge_conflict_text(
-        self, rebase_items: List[RebaseItem]
-    ) -> Optional[str]:
-        result_commit_id = self.get_cached_commit(rebase_items)
-        return self._merge_conflict_texts.get(result_commit_id, None)
+        return cache_values
 
 
 class MergeConflictDetectorSingleton:
@@ -182,20 +191,18 @@ class MergeConflictDetectorSingleton:
         # 3. Terminate if there is a merge conflict.
         # 4. Clean up the temporary repo.
 
-        conflicting_commit_indices = []
+        # Start from a cached commit, or the original base.
+        cache_values = self._cache.check_cache(rebase_items)
+        base = cache_values[-1].commit_hash
 
         # File paths that have conflicted so far. Make sure these aren't committed
         # again after a conflict is detected, since we are only looking for the
         # first conflict for each file.
-        conflicting_files = set()
+        conflicting_files = set(cache_values[-1].conflicting_file_paths_total)
 
-        # Start from a cached commit, or the original base.
-        cached_commit, remaining_commits_start = self._cache.get_cached_commit(
-            rebase_items
-        )
-        print(f"{cached_commit=}, {remaining_commits_start=}")
-        onto = currently_rebasing_on(self.original_repo)
-        base = onto if cached_commit is None else cached_commit
+        conflicting_commit_indices = list(cache_values[-1].conflicting_commit_indices)
+
+        remaining_commits_start = len(cache_values) - 1
 
         self.temp_repo.head.reset(working_tree=True, index=True)
         self.temp_repo.git.checkout(base)
@@ -223,7 +230,6 @@ class MergeConflictDetectorSingleton:
                     if (
                         change.included
                         and change.path in self.temp_repo.index.unmerged_blobs()
-                        and change.path not in conflicting_files
                     ):
                         # Merge conflict on included file
                         conflicting_files.add(change.path)
@@ -278,6 +284,8 @@ class MergeConflictDetectorSingleton:
                 rebase_item,
                 result_commit.hexsha,
                 merge_conflict_text,
+                tuple(conflicting_files),
+                tuple(conflicting_commit_indices),
             )
 
         self._lock.release()
