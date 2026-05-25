@@ -50,8 +50,6 @@ class MergeConflictDetectorSingleton:
         may cause additional merge conflicts, or fix later merge conflicts.
         """
 
-        print("Temporary directory:", self.temp_dir)
-
         # 1. Create a temporary clone of the repo.
         # 2. Apply each commit in turn in the temporary repo.
         # 3. Terminate if there is a merge conflict.
