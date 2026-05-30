@@ -82,6 +82,8 @@ class RebaseTodoWidget(Widget):
             self._set_rebase_action("pick")
         if event.key == "f":
             self._set_rebase_action("fixup")
+        if event.key == "ctrl+s":
+            self.action_select_squash_candidates()
         if event.key == "s":
             self._set_rebase_action("squash")
         if event.key == "e":
@@ -184,6 +186,32 @@ class RebaseTodoWidget(Widget):
 
     def action_select_all(self):
         self._todo_state.toggle_select_all_or_none()
+        self.update_state()
+
+    def action_select_squash_candidates(self):
+        """Select squash candidates for the active commit
+
+        Squash candidates are suggested commits to squash the current
+        commit into. They modify some of the same files as the current
+        commit.
+        """
+        rebase_items = self._todo_state.get_current_items()
+
+        active_item: RebaseItem = self._todo_state.get_active_item()
+        active_item_files = set(active_item.file_changes.keys())
+
+        selected = [False] * len(rebase_items)
+        for i, rebase_item in enumerate(rebase_items):
+            if self._todo_state.cursor == i:
+                continue
+
+            common_files = active_item_files.intersection(
+                rebase_item.file_changes.keys()
+            )
+            if len(common_files) > 0:
+                selected[i] = True
+
+        self._todo_state.set_selected(selected)
         self.update_state()
 
     def _set_rebase_action(self, action: RebaseAction):

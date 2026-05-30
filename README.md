@@ -32,6 +32,8 @@ There are two tabs:
 - Move selected commits with m.
 - Set actions for selected commits with f (fixup), s (squash), p (pick), e (edit), d (drop) and r (reword).
 - Duplicate a commit with c.
+- Select squash candidates for the current commit using ctrl+s. These are commits that modify some of the same files as
+  the current commit, so the current commit could potentially be squashed into them.
 - Remove some files from a commit by using h and l to move the cursor left and right, and t to toggle the selected file
   for a particular commit. You can also use the mouse.
 - Press enter to perform the rebase.
